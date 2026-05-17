@@ -26,8 +26,6 @@ const state = {
   playlistView:  null,   // current playlist id
   ctxTrack:      null,   // track targeted by context menu
   ctxPlaylistId: null,
-  stemAudios:    {},     // { vocals: AudioElement, ... }
-  stemGains:     {},
   audioCtx:      null,
 };
 
@@ -124,14 +122,6 @@ function renderHomeAlbums() {
   state.library.albums.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
-
-  // Recent albums (last 4)
-  const recentGrid = $('recent-albums');
-  if (recentGrid) {
-    recentGrid.innerHTML = '';
-    const recent = [...state.library.albums].reverse().slice(0, 4);
-    recent.forEach((album, i) => recentGrid.appendChild(makeAlbumCard(album, i)));
-  }
 }
 
 function renderLibraryAlbums() {
@@ -142,7 +132,16 @@ function renderLibraryAlbums() {
     grid.innerHTML = `<p class="loading-msg">No albums found.</p>`;
     return;
   }
-  state.library.albums.forEach((album, i) => {
+  let albums = [...state.library.albums];
+  const sort = $('library-sort')?.value || 'newest';
+  if (sort === 'a-z') {
+    albums.sort((a,b) => a.name.localeCompare(b.name));
+  } else if (sort === 'z-a') {
+    albums.sort((a,b) => b.name.localeCompare(a.name));
+  } else {
+    albums.reverse();
+  }
+  albums.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
 }
@@ -263,8 +262,6 @@ function playCurrentQueueItem() {
 }
 
 function loadAndPlay(track) {
-  stopStemAudio();
-  audio.muted = false;
   const url = `${BASE_URL}/${track.path}`;
   audio.src = url;
   audio.load();
@@ -281,11 +278,6 @@ function updatePlayerUI(track) {
 
   const likeBtn = $('btn-like');
   likeBtn.classList.toggle('liked', state.liked.has(track.path));
-
-  // Show stems button if this track has stems
-  const stemsBtn = $('btn-stems');
-  const hasStems = track.stems && Object.keys(track.stems).length > 0;
-  stemsBtn.style.display = hasStems ? '' : 'none';
 }
 
 function updateTrackListHighlight() {
@@ -472,20 +464,16 @@ function setupEventListeners() {
     }
   });
 
-  // Stems panel
-  $('btn-stems').addEventListener('click', () => {
-    if ($('stems-panel').classList.contains('hidden')) {
-      openStemsPanel();
-    } else {
-      $('stems-panel').classList.add('hidden');
-      stopStemAudio();
-      audio.muted = false;
+  $('library-sort')?.addEventListener('change', renderLibraryAlbums);
+
+  $('btn-add-playlist-player')?.addEventListener('click', () => {
+    if (state.currentTrack) {
+      openAddToPlaylistModal([{...state.currentTrack, albumName: state.currentTrack.albumName}]);
     }
   });
-  $('btn-close-stems').addEventListener('click', () => {
-    $('stems-panel').classList.add('hidden');
-    stopStemAudio();
-    audio.muted = false;
+
+  $('player-art')?.addEventListener('click', () => {
+    $('player-bar').classList.toggle('fullscreen');
   });
 
   // Queue panel
@@ -754,102 +742,7 @@ function openModal(title, bodyHtml, buttons) {
 }
 function closeModal() { $('modal-overlay').classList.add('hidden'); }
 
-// ── Stems ─────────────────────────────────────────────────────
-function openStemsPanel() {
-  if (state.currentTrack) openStemsPanelForTrack(state.currentTrack);
-}
 
-function openStemsPanelForTrack(track) {
-  const panel = $('stems-panel');
-  $('stems-track-name').textContent = track.title;
-  const container = $('stems-tracks');
-  container.innerHTML = '';
-  stopStemAudio();
-  audio.muted = true;
-
-  const stems = track.stems || {};
-  const stemNames = ['vocals', 'drums', 'bass', 'other'];
-
-  if (!Object.keys(stems).length) {
-    container.innerHTML = `<p style="color:var(--text-muted);font-size:.85rem;padding:20px 0">No stems available for this track.</p>`;
-    panel.classList.remove('hidden');
-    return;
-  }
-
-  stemNames.forEach(stemName => {
-    if (!stems[stemName]) return;
-    const stemAudio = new Audio();
-    stemAudio.src = `${BASE_URL}/${stems[stemName]}`;
-    stemAudio.volume = 1;
-    state.stemAudios[stemName] = stemAudio;
-    state.stemGains[stemName] = 1;
-
-    // Sync stem playback with main audio
-    stemAudio.load();
-    if (state.isPlaying) {
-      stemAudio.currentTime = audio.currentTime;
-      stemAudio.play().catch(() => {});
-    }
-
-    const row = document.createElement('div');
-    row.className = 'stem-row';
-    row.innerHTML = `
-      <span class="stem-label ${stemName}">${stemName}</span>
-      <button class="stem-solo" data-stem="${stemName}">S</button>
-      <input type="range" class="stem-vol" min="0" max="1" step="0.01" value="1" data-stem="${stemName}" />
-      <button class="stem-mute" data-stem="${stemName}" title="Mute">🔊</button>
-    `;
-
-    row.querySelector('.stem-vol').addEventListener('input', e => {
-      const vol = parseFloat(e.target.value);
-      state.stemGains[stemName] = vol;
-      stemAudio.volume = vol;
-    });
-
-    row.querySelector('.stem-mute').addEventListener('click', e => {
-      stemAudio.muted = !stemAudio.muted;
-      e.target.textContent = stemAudio.muted ? '🔇' : '🔊';
-      e.target.classList.toggle('muted', stemAudio.muted);
-    });
-
-    row.querySelector('.stem-solo').addEventListener('click', e => {
-      const btn = e.target;
-      const isSolo = btn.classList.toggle('active');
-      stemNames.forEach(sn => {
-        if (state.stemAudios[sn]) {
-          state.stemAudios[sn].muted = isSolo && sn !== stemName;
-        }
-      });
-    });
-
-    container.appendChild(row);
-  });
-
-  // Sync stem playback to main audio events
-  audio.addEventListener('seeked', syncStems);
-  audio.addEventListener('play',   resumeStems);
-  audio.addEventListener('pause',  pauseStems);
-
-  panel.classList.remove('hidden');
-}
-
-function syncStems() {
-  Object.values(state.stemAudios).forEach(a => { a.currentTime = audio.currentTime; });
-}
-function resumeStems() {
-  syncStems();
-  Object.values(state.stemAudios).forEach(a => a.play().catch(() => {}));
-}
-function pauseStems() {
-  Object.values(state.stemAudios).forEach(a => a.pause());
-}
-function stopStemAudio() {
-  Object.values(state.stemAudios).forEach(a => { a.pause(); a.src = ''; });
-  state.stemAudios = {};
-  audio.removeEventListener('seeked', syncStems);
-  audio.removeEventListener('play',   resumeStems);
-  audio.removeEventListener('pause',  pauseStems);
-}
 
 // ── Search ────────────────────────────────────────────────────
 function handleSearch() {

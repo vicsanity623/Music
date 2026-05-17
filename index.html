@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SoundVault" />
@@ -90,7 +90,6 @@
     <div class="view-header">
       <h1>Good <span id="greeting-time">evening</span></h1>
     </div>
-    <div id="recent-albums" class="card-grid"></div>
     <h2 class="section-title">All Albums</h2>
     <div id="home-albums" class="card-grid"></div>
   </section>
@@ -107,7 +106,14 @@
   <!-- Library / Album detail view -->
   <section id="view-library" class="view">
     <div id="library-root">
-      <h1>Your Library</h1>
+      <div class="view-header" style="justify-content: space-between; display: flex; align-items: center;">
+        <h1 style="margin: 0;">Your Library</h1>
+        <select id="library-sort" style="background: var(--surface); color: var(--text); border: none; padding: 6px 12px; border-radius: 6px; font-family: 'DM Sans', sans-serif;">
+          <option value="newest">Newest</option>
+          <option value="a-z">A - Z</option>
+          <option value="z-a">Z - A</option>
+        </select>
+      </div>
       <div id="library-albums" class="card-grid"></div>
     </div>
     <div id="album-detail" class="hidden">
@@ -185,6 +191,9 @@
     <button class="player-like" id="btn-like" title="Like">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
     </button>
+    <button class="player-add" id="btn-add-playlist-player" title="Add to Playlist" style="background:none;border:none;color:var(--text-muted);cursor:pointer;margin-left:8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
   </div>
 
   <div class="player-controls">
@@ -217,9 +226,6 @@
   </div>
 
   <div class="player-right">
-    <button id="btn-stems" class="ctrl-btn stems-btn" title="Stems" style="display:none">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3H5a2 2 0 00-2 2v4"/><path d="M15 3h4a2 2 0 012 2v4"/><path d="M9 21H5a2 2 0 01-2-2v-4"/><path d="M15 21h4a2 2 0 002-2v-4"/></svg>
-    </button>
     <div class="volume-wrap">
       <svg class="vol-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
       <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" />
@@ -230,15 +236,6 @@
   </div>
 </div>
 
-<!-- ── Stems Panel ─────────────────────────────────────────── -->
-<div id="stems-panel" class="panel hidden">
-  <div class="panel-header">
-    <h3>Stem Mixer</h3>
-    <button class="panel-close" id="btn-close-stems">×</button>
-  </div>
-  <p class="panel-subtitle" id="stems-track-name"></p>
-  <div id="stems-tracks"></div>
-</div>
 
 <!-- ── Queue Panel ─────────────────────────────────────────── -->
 <div id="queue-panel" class="panel hidden">
@@ -268,8 +265,7 @@
   <li class="separator"></li>
   <li id="ctx-add-playlist">Add to playlist</li>
   <li id="ctx-remove-playlist" class="hidden danger">Remove from playlist</li>
-  <li class="separator"></li>
-  <li id="ctx-stems">View stems</li>
+
 </ul>
 
 <!-- ── Hidden audio element ───────────────────────────────── -->

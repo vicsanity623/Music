@@ -168,7 +168,7 @@ body {
 #main-content {
   grid-area: main;
   overflow-y: auto;
-  padding: 32px 40px;
+  padding: calc(32px + env(safe-area-inset-top)) 40px calc(100px + env(safe-area-inset-bottom));
   position: relative;
 }
 
@@ -509,14 +509,56 @@ h2.section-title {
   grid-template-columns: 1fr 2fr 1fr;
   align-items: center;
   gap: 16px;
-  padding: 0 20px;
+  padding: 0 20px env(safe-area-inset-bottom);
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   z-index: 100;
+  transition: all var(--t);
 }
 #player-bar.hidden { display: none !important; }
+
+/* Fullscreen Mode */
+#player-bar.fullscreen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(40px + env(safe-area-inset-top)) 40px calc(40px + env(safe-area-inset-bottom));
+  background: rgba(10, 10, 15, 0.95);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  z-index: 1000;
+  border: none;
+}
+#player-bar.fullscreen .player-track {
+  flex-direction: column;
+  text-align: center;
+  margin-bottom: 40px;
+}
+#player-bar.fullscreen .player-art {
+  width: min(80vw, 320px);
+  height: min(80vw, 320px);
+  margin-bottom: 24px;
+}
+#player-bar.fullscreen .player-title {
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+  white-space: normal;
+}
+#player-bar.fullscreen .player-album {
+  font-size: 1rem;
+}
+#player-bar.fullscreen .player-controls {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto 30px;
+}
+#player-bar.fullscreen .player-right {
+  justify-content: center;
+}
 
 /* Track info */
 .player-track { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -986,8 +1028,8 @@ h2.section-title {
     padding: 0 12px;
     height: var(--player-h-mob);
   }
-  .player-controls { display: none; }
-  .player-right { display: none; }
+  #player-bar:not(.fullscreen) .player-controls { display: none; }
+  #player-bar:not(.fullscreen) .player-right { display: none; }
   .card-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 14px; }
   .album-art-lg { width: 130px; height: 130px; }
   .album-meta h1 { font-size: 1.6rem; }

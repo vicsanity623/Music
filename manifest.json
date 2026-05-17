@@ -2,7 +2,7 @@
   "name": "SoundVault",
   "short_name": "SoundVault",
   "description": "Your local music library — albums, stems, playlists",
-  "start_url": "/",
+  "start_url": "./index.html",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
@@ -58,7 +58,10 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["music", "entertainment"],
+  "categories": [
+    "music",
+    "entertainment"
+  ],
   "screenshots": [],
   "shortcuts": [
     {
