@@ -76,11 +76,10 @@ function persist() {
 // ── Load library ─────────────────────────────────────────────
 async function loadLibrary() {
   const main = $('main-content');
-  // Show spinner while loading
-  const views = $$('.view.active');
-  views.forEach(v => {
-    v.innerHTML = `<div class="loading-msg"><div class="loading-spinner"></div><p>Loading library…</p></div>`;
-  });
+  const spinner = document.createElement('div');
+  spinner.id = 'global-spinner';
+  spinner.innerHTML = `<div class="loading-msg" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="loading-spinner"></div><p>Loading library…</p></div>`;
+  document.body.appendChild(spinner);
 
   try {
     const res = await fetch(LIBRARY_URL, { cache: 'no-cache' });
@@ -90,6 +89,8 @@ async function loadLibrary() {
     console.error('Failed to load library.json', e);
     state.library = { albums: [] };
     showToast('Could not load library. Is the server running?', 'warn');
+  } finally {
+    spinner.remove();
   }
 }
 
@@ -205,11 +206,18 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
       <div class="track-info">
         <p class="track-title">${escHtml(track.title)}</p>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:12px">
         <span class="track-format">${track.format || 'MP3'}</span>
+        <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;" title="Add to Playlist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </div>
     `;
     li.addEventListener('click', () => playTrackFromContext(tracks, i, albumName));
+    li.querySelector('.track-add-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      openAddToPlaylistModal([{...track, albumName}]);
+    });
     li.addEventListener('contextmenu', e => {
       e.preventDefault();
       openContextMenu(e, track, playlistId);
@@ -256,6 +264,7 @@ function playCurrentQueueItem() {
 
 function loadAndPlay(track) {
   stopStemAudio();
+  audio.muted = false;
   const url = `${BASE_URL}/${track.path}`;
   audio.src = url;
   audio.load();
@@ -465,12 +474,18 @@ function setupEventListeners() {
 
   // Stems panel
   $('btn-stems').addEventListener('click', () => {
-    if ($('stems-panel').classList.contains('hidden')) openStemsPanel();
-    else $('stems-panel').classList.add('hidden');
+    if ($('stems-panel').classList.contains('hidden')) {
+      openStemsPanel();
+    } else {
+      $('stems-panel').classList.add('hidden');
+      stopStemAudio();
+      audio.muted = false;
+    }
   });
   $('btn-close-stems').addEventListener('click', () => {
     $('stems-panel').classList.add('hidden');
     stopStemAudio();
+    audio.muted = false;
   });
 
   // Queue panel
@@ -708,7 +723,10 @@ function openAddToPlaylistModal(tracks) {
       const pl = state.playlists.find(p => p.id === item.dataset.pl);
       if (!pl) return;
       tracks.forEach(t => {
-        if (!pl.tracks.some(pt => pt.path === t.path)) pl.tracks.push(t);
+        if (!pl.tracks.some(pt => pt.path === t.path)) {
+          pl.tracks.push(t);
+          downloadForOffline(t);
+        }
       });
       persist();
       item.classList.add('in-playlist');
@@ -747,6 +765,7 @@ function openStemsPanelForTrack(track) {
   const container = $('stems-tracks');
   container.innerHTML = '';
   stopStemAudio();
+  audio.muted = true;
 
   const stems = track.stems || {};
   const stemNames = ['vocals', 'drums', 'bass', 'other'];
@@ -959,4 +978,27 @@ function shuffleArray(arr) {
 function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// ── Offline caching ──────────────────────────────────────────
+async function downloadForOffline(track) {
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open('soundvault-audio-v1');
+    const urlsToCache = [`${BASE_URL}/${track.path}`];
+    if (track.stems) {
+      for (const stem in track.stems) {
+        urlsToCache.push(`${BASE_URL}/${track.stems[stem]}`);
+      }
+    }
+    for (const url of urlsToCache) {
+      const cached = await cache.match(url);
+      if (!cached) {
+        console.log('Downloading for offline:', url);
+        await cache.add(url);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to cache for offline:', e);
+  }
 }
