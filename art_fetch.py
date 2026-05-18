@@ -140,6 +140,56 @@ def extract_single_tag(tag_obj, album_hint=""):
             return non_album_vals[0]
     return vals[0]
 
+def parse_filename(stem):
+    """
+    Parses a filename stem to extract artist and title.
+    Returns (cleaned_title, extracted_artist or "")
+    """
+    # 1. Strip leading track number prefix like "01 - ", "26 - ", "16 "
+    s = re.sub(r"^\d+\s*[-_.]\s*", "", stem).strip()
+    # Also handle numeric space prefix without dash
+    s = re.sub(r"^\d+\s+", "", s).strip()
+    
+    # 2. Strip featured artist suffixes from the filename
+    s = re.sub(r"(?i)\s+(?:featuring|feat\.?|ft\.?)\s+.*$", "", s).strip()
+    
+    # 3. Strip common YouTube junk terms case-insensitively
+    s = re.sub(r"(?i)[\(\[\{]?\s*(?:lyrics|lyric|audio|video|official|hd|hq|4k|clip|footage)\s*[\)\]\}]?", "", s).strip()
+    
+    # 4. Clean up unmatched brackets/parentheses and double spaces
+    s = s.replace("(", "").replace(")", "").replace("[", "").replace("]", "").replace("{", "").replace("}", "")
+    s = re.sub(r"\s{2,}", " ", s).strip()
+    
+    # 5. Handle dash separators to extract artist and title:
+    # Look for "Artist - Title", "Artist – Title", "Artist — Title"
+    artist = ""
+    title = s
+    
+    for separator in (" - ", " – ", " — "):
+        if separator in s:
+            parts = s.split(separator, 1)
+            artist = parts[0].strip()
+            title = parts[1].strip()
+            break
+    else:
+        # If no spaced dash, let's look for a simple dash but avoid splits for known terms
+        match = re.search(r"\s*-\s*", s)
+        if match:
+            idx = match.start()
+            left = s[:idx].strip()
+            right = s[idx + len(match.group(0)):].strip()
+            if left and right and not (left.lower() == "blink" and right.lower().startswith("182")):
+                artist = left
+                title = right
+
+    # Clean up the extracted artist and title
+    if artist:
+        artist = clean_artist(artist)
+    
+    title = title.strip("-_.,/\\ )}] ({[ &")
+    title = re.sub(r"\s{2,}", " ", title).strip()
+    return title, artist
+
 def clean_title(raw, album_hint=""):
     t = raw.replace("_", " ")
     t = TRACK_NUM_RE.sub("", t)
@@ -161,9 +211,15 @@ def clean_artist(artist):
         return "Unknown Artist"
     # Remove common YouTube channel suffixes
     a = re.sub(r"(?i)\s*(?:music|vevo|-topic|official|youtube)\s*$", "", artist).strip()
-    # Specific override: EminemMusic -> Eminem
-    if a.lower() in ("eminemmusic", "eminem"):
+    
+    # Normalize comparison to handle spelling variations
+    norm = re.sub(r'[^a-z0-9]', '', a.lower())
+    if norm in ("eminemmusic", "eminem"):
         return "Eminem"
+    if norm == "megadeath":
+        return "Megadeth"
+    if norm == "blink182":
+        return "blink-182"
     return a
 
 def normalize_compare(s):
@@ -237,6 +293,16 @@ def fetch_caa(release_mbid):
         print(f"  ✗ CAA error: {e}")
     return None
 
+def fetch_caa_group(rg_mbid):
+    try:
+        r = requests.get(f"https://coverartarchive.org/release-group/{rg_mbid}/front-500",
+                         headers={"User-Agent": UA}, timeout=20, allow_redirects=True)
+        if r.status_code == 200 and r.content:
+            return r.content
+    except Exception:
+        pass
+    return None
+
 def extract_embedded_art(path):
     try:
         if path.suffix.lower() == ".mp3":
@@ -301,6 +367,7 @@ def search_mb(title, artist="", album_hint=""):
                         "artist":  (rec.get("artist-credit") or [{}])[0].get("artist", {}).get("name", artist),
                         "release": rel["id"],
                         "album":   rel["title"],
+                        "release_group": rel.get("release-group", {}).get("id"),
                     }
 
         # 2. Prefer Studio Album releases (exclude Compilations/Live if possible)
@@ -315,6 +382,7 @@ def search_mb(title, artist="", album_hint=""):
                     "artist":  (rec.get("artist-credit") or [{}])[0].get("artist", {}).get("name", artist),
                     "release": rel["id"],
                     "album":   rel["title"],
+                    "release_group": rg.get("id"),
                 }
                 if not norm_hint:
                     return best_match
@@ -327,12 +395,14 @@ def search_mb(title, artist="", album_hint=""):
         if rec.get("score", 0) < 70:
             continue
         for rel in rec.get("releases", []):
-            if rel.get("release-group", {}).get("primary-type") == "Album":
+            rg = rel.get("release-group", {})
+            if rg.get("primary-type") == "Album":
                 return {
                     "title":   rec["title"],
                     "artist":  (rec.get("artist-credit") or [{}])[0].get("artist", {}).get("name", artist),
                     "release": rel["id"],
                     "album":   rel["title"],
+                    "release_group": rg.get("id"),
                 }
                 
         # Hard fallback to the absolute first release
@@ -344,6 +414,7 @@ def search_mb(title, artist="", album_hint=""):
                 "artist":  (rec.get("artist-credit") or [{}])[0].get("artist", {}).get("name", artist),
                 "release": rel["id"],
                 "album":   rel["title"],
+                "release_group": rel.get("release-group", {}).get("id"),
             }
             
     return None
@@ -369,8 +440,12 @@ def process_album(album_dir, dry_run=False):
     artist_hint = album_dir.parent.name if album_dir.parent != ALBUMS_DIR else ""
 
     for f in audio_files:
+        fn_title, fn_artist = parse_filename(f.stem)
         tags = read_tags(f)
-        raw_title, raw_artist = tags["title"] or f.stem, tags["artist"] or artist_hint
+        
+        raw_artist = fn_artist or tags["artist"] or artist_hint
+        raw_title = fn_title or tags["title"] or f.stem
+        
         cleaned = clean_title(raw_title, album_hint=album_hint)
         if tags.get("album"):
             cleaned = clean_title(cleaned, album_hint=tags["album"])
@@ -393,15 +468,22 @@ def process_album(album_dir, dry_run=False):
 
     # Determine dominant artist and album in this directory
     dominant_artist = None
+    dominant_album = None
+    is_cohesive_album = False
+    
+    if album_counts:
+        dominant_album = max(album_counts, key=album_counts.get)
+        dominant_count = album_counts[dominant_album]
+        # Folder is cohesive if at least 40% of matched tracks match dominant album, and at least 2 tracks match (or if it is very small)
+        if dominant_count >= max(2, len(audio_files) * 0.4):
+            is_cohesive_album = True
+            
     if artist_counts:
         dominant_artist = max(artist_counts, key=artist_counts.get)
     elif artist_hint:
         dominant_artist = clean_artist(artist_hint)
-    
-    dominant_album = None
-    if album_counts:
-        dominant_album = max(album_counts, key=album_counts.get)
-    else:
+        
+    if not dominant_album:
         dominant_album = album_dir.name
 
     # Pass 2: Process and relocate files
@@ -414,12 +496,13 @@ def process_album(album_dir, dry_run=False):
             final_artist = clean_artist(mb['artist'])
             final_album = mb['album']
         else:
-            if dominant_artist and dominant_album:
+            if is_cohesive_album and dominant_artist and dominant_album:
                 print(f"      No match found. Using dominant folder artist/album: \"{dominant_artist}\" - \"{dominant_album}\"")
                 final_title, final_artist, final_album = cleaned, dominant_artist, dominant_album
             else:
-                print(f"      No match found. Using folder/tag info.")
-                final_title, final_artist, final_album = cleaned, clean_artist(raw_artist), album_dir.name
+                artist_val = clean_artist(raw_artist) if raw_artist else "Unknown Artist"
+                print(f"      No match found. Organizing as Single: \"{artist_val}\" - \"{cleaned}\"")
+                final_title, final_artist, final_album = cleaned, artist_val, "Single"
 
         # 2. Determine Destination
         # Pattern: Albums/Artist Name/Album Name/
@@ -435,16 +518,30 @@ def process_album(album_dir, dry_run=False):
             
             # 3. Fetch/Update Art in the NEW destination
             art_path = dest_dir / "cover.jpg"
+            art_data = None
             if not art_path.exists() and mb:
                 print(f"      Art    : fetching…", end=" ", flush=True)
-                art = fetch_caa(mb["release"])
-                if art: 
-                    art_path.write_bytes(art)
+                art_data = fetch_caa(mb["release"])
+                if not art_data and mb.get("release_group"):
+                    art_data = fetch_caa_group(mb["release_group"])
+                
+                if art_data: 
+                    art_path.write_bytes(art_data)
                     print(f"✓")
-                else: print("✗")
+                else: 
+                    print("✗")
+            elif art_path.exists():
+                try:
+                    art_data = art_path.read_bytes()
+                except Exception:
+                    pass
 
             # 4. Update Tags & Relocate Audio
             write_metadata(f, final_title, final_artist, final_album)
+            
+            # Embed the cover art directly into the audio file to overwrite YouTube thumbnails!
+            if art_data:
+                embed_art(f, art_data)
             
             # 5. Handle Stems Relocation
             stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
