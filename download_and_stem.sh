@@ -318,7 +318,7 @@ for album_dir in sorted(albums_root.iterdir()):
     for f in sorted(album_dir.iterdir()):
         if f.suffix.lower() not in audio_exts:
             continue
-        stem_folder_name = re.sub(r'^\d+\s*-\s*', '', f.stem)  # strip leading "01 - "
+        stem_folder_name = re.sub(r'^\d+\s*[-_.]\s*', '', f.stem)
         stem_dir = stems_root / (album_dir.name + "STEMS") / stem_folder_name
         stems = {}
         for stem in ("vocals", "drums", "bass", "other"):
@@ -328,17 +328,21 @@ for album_dir in sorted(albums_root.iterdir()):
                     stems[stem] = str(sp.relative_to(out_path.parent))
                     break
         tracks.append({
-            "title": stem_folder_name,
+            "title":    stem_folder_name,
             "filename": f.name,
-            "path": str(f.relative_to(out_path.parent)),
-            "format": f.suffix.lstrip(".").upper(),
-            "stems": stems
+            "path":     str(f.relative_to(out_path.parent)),
+            "format":   f.suffix.lstrip(".").upper(),
+            "stems":    stems,
         })
     if tracks:
+        # Include cover.jpg path if art_fetch.py has already run
+        cover_jpg = album_dir / "cover.jpg"
+        art_rel   = str(cover_jpg.relative_to(out_path.parent)) if cover_jpg.exists() else ""
         library["albums"].append({
-            "name": album_dir.name,
-            "path": str(album_dir.relative_to(out_path.parent)),
-            "tracks": tracks
+            "name":   album_dir.name,
+            "path":   str(album_dir.relative_to(out_path.parent)),
+            "art":    art_rel,
+            "tracks": tracks,
         })
 
 out_path.write_text(json.dumps(library, indent=2, ensure_ascii=False))

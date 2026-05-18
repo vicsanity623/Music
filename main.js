@@ -146,13 +146,27 @@ function renderLibraryAlbums() {
   });
 }
 
+// ── Album art helper ──────────────────────────────────────────
+function getAlbumArt(albumName) {
+  const album = state.library?.albums?.find(a => a.name === albumName);
+  return album?.art ? `${BASE_URL}/${album.art}` : null;
+}
+
+function artInnerHTML(artUrl, hue, size = '40%') {
+  if (artUrl) {
+    return `<img src="${artUrl}" alt="cover" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" loading="lazy" onerror="this.parentElement.dataset.broken='1';this.remove()" />`;
+  }
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="width:${size};height:${size}"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`;
+}
+
 function makeAlbumCard(album, idx) {
   const card = document.createElement('div');
   card.className = 'album-card';
-  const hue = idx % 5;
+  const hue    = idx % 5;
+  const artUrl = album.art ? `${BASE_URL}/${album.art}` : null;
   card.innerHTML = `
-    <div class="card-art" data-hue="${hue}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+    <div class="card-art" data-hue="${artUrl ? '' : hue}" style="${artUrl ? 'background:#111118;' : ''}">
+      ${artInnerHTML(artUrl, hue)}
       <button class="card-play-btn" data-album="${album.name}" title="Play album">
         <svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg>
       </button>
@@ -161,11 +175,8 @@ function makeAlbumCard(album, idx) {
     <p class="card-sub">${album.tracks.length} track${album.tracks.length !== 1 ? 's' : ''}</p>
   `;
   card.addEventListener('click', e => {
-    if (e.target.closest('.card-play-btn')) {
-      playAlbum(album);
-    } else {
-      openAlbumDetail(album);
-    }
+    if (e.target.closest('.card-play-btn')) playAlbum(album);
+    else openAlbumDetail(album);
   });
   return card;
 }
@@ -174,9 +185,9 @@ function makeAlbumCard(album, idx) {
 function openAlbumDetail(album) {
   state.albumView = album.name;
   $('detail-title').textContent = album.name;
-  $('detail-art').innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
-  `;
+  const artUrl = album.art ? `${BASE_URL}/${album.art}` : null;
+  $('detail-art').innerHTML = artInnerHTML(artUrl, 0, '50%');
+  $('detail-art').style.background = artUrl ? '#111118' : '';
   renderTrackList('track-list', album.tracks, album.name, null);
   $('library-root').classList.add('hidden');
   $('album-detail').classList.remove('hidden');
@@ -276,8 +287,16 @@ function updatePlayerUI(track) {
   $('icon-play').classList.add('hidden');
   $('icon-pause').classList.remove('hidden');
 
-  const likeBtn = $('btn-like');
-  likeBtn.classList.toggle('liked', state.liked.has(track.path));
+  // Show album art in player bar
+  const artUrl = getAlbumArt(track.albumName);
+  const playerArt = $('player-art');
+  if (artUrl) {
+    playerArt.innerHTML = `<img src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:8px;" />`;
+  } else {
+    playerArt.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`;
+  }
+
+  $('btn-like').classList.toggle('liked', state.liked.has(track.path));
 }
 
 function updateTrackListHighlight() {
