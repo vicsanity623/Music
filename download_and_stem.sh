@@ -12,7 +12,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 # ── Config ───────────────────────────────────────────────────
-MUSIC_ROOT="${MUSIC_ROOT:-/Volumes/XTRA/PYOB2026MAY/MusicLibrary}"
+MUSIC_ROOT="/Volumes/XTRA/PYOB2026MAY/MusicLibrary"
 ALBUMS_DIR="$MUSIC_ROOT/Albums"
 STEMS_DIR="$MUSIC_ROOT/STEMS"
 AUDIO_FORMAT="${AUDIO_FORMAT:-mp3}"          # mp3 | flac

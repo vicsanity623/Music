@@ -11,8 +11,8 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 # ── Paths (SSD is the canonical music store) ─────────────────
-MUSIC_ROOT="${MUSIC_ROOT:-/Volumes/XTRA/PYOB2026MAY/MusicLibrary}"
-WEB_ROOT="${WEB_ROOT:-/Volumes/XTRA/PYOB2026MAY/MusicLibrary/web}"
+MUSIC_ROOT="/Volumes/XTRA/PYOB2026MAY/MusicLibrary"
+WEB_ROOT="/Volumes/XTRA/PYOB2026MAY/MusicLibrary/web"
 PORT="${PORT:-8080}"
 
 log()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
