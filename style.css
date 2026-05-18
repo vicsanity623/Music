@@ -281,67 +281,70 @@ h2.section-title {
   color: var(--text-primary);
 }
 
-/* ── Library Category List (Apple Music style) ─────────────── */
-.library-category-list {
+/* ── Apple Music Style Library Menu ── */
+.library-menu {
   list-style: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--bg-surface);
+  margin-bottom: 32px;
+  border-top: 1px solid var(--border);
 }
 
-.library-category-item {
+.library-menu li {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.1rem;
+  font-weight: 500;
   cursor: pointer;
   transition: background var(--t);
-  border-bottom: 1px solid var(--border);
-  user-select: none;
 }
 
-.library-category-item:last-child {
-  border-bottom: none;
-}
-
-.library-category-item:hover {
+.library-menu li:hover {
   background: var(--bg-hover);
 }
 
-.library-category-item:active {
-  background: var(--bg-active);
+.library-menu li svg {
+  width: 24px;
+  height: 24px;
+  margin-right: 16px;
+  color: #fa243c; /* Apple Music Red tint */
 }
 
-.lib-cat-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--bg-active);
+.library-menu .chevron {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  font-weight: 300;
+}
+
+/* ── Songs View Buttons ── */
+.action-buttons-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.action-btn-half {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: #fa243c; /* Apple Music Red tint */
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t), transform var(--t);
 }
 
-.lib-cat-icon svg {
-  width: 16px;
-  height: 16px;
-  color: #fa243c;
-}
-
-.lib-cat-label {
-  flex: 1;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: #fa243c;
-}
-
-.lib-cat-chevron {
-  width: 16px;
-  height: 16px;
-  color: var(--text-muted);
-  flex-shrink: 0;
+.action-btn-half:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
 }
 
 /* ── Sub-view header ───────────────────────────────────────── */
