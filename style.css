@@ -1022,7 +1022,10 @@ h2.section-title {
   }
   .mnav-btn svg { width: 22px; height: 22px; }
   .mnav-btn.active { color: var(--gold); }
-  #main-content { padding: 20px 16px 0; overflow-y: auto; }
+  #main-content {
+    padding: calc(20px + env(safe-area-inset-top)) 16px 0;
+    overflow-y: auto;
+  }
   #player-bar {
     grid-template-columns: 1fr auto;
     padding: 0 12px;
@@ -1040,4 +1043,10 @@ h2.section-title {
 /* ── iOS safe areas ────────────────────────────────────────── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   #player-bar { padding-bottom: env(safe-area-inset-bottom); height: auto; min-height: var(--player-h); }
+
+  /* On mobile PWA (standalone), the status bar sits on top of the viewport.
+     Ensure the bottom nav also clears the home indicator on iPhone. */
+  @media (max-width: 600px) {
+    #mobile-nav { padding-bottom: max(env(safe-area-inset-bottom), 8px); }
+  }
 }
