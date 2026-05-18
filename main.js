@@ -507,6 +507,24 @@ function setupEventListeners() {
   $('modal-overlay').addEventListener('click', e => {
     if (e.target === $('modal-overlay')) closeModal();
   });
+  
+  // --- New Apple Music Screen Listeners ---
+  $('menu-songs')?.addEventListener('click', () => {
+    switchView('songs');
+    renderAllSongs();
+  });
+
+  $('btn-back-songs')?.addEventListener('click', () => {
+    switchView('library');
+  });
+
+  $('btn-play-all-songs')?.addEventListener('click', () => {
+    playAllSongsList(false);
+  });
+
+  $('btn-shuffle-all-songs')?.addEventListener('click', () => {
+    playAllSongsList(true);
+  });
 
   // Context menu
   $('ctx-play').addEventListener('click', () => {
@@ -939,6 +957,90 @@ function shuffleArray(arr) {
 function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// ── All Songs View Features ───────────────────────────────────
+
+function getAllSongsSorted() {
+  let allSongs = [];
+  if (!state.library?.albums) return allSongs;
+  
+  // Extract all tracks from all albums
+  state.library.albums.forEach(album => {
+    album.tracks.forEach(track => {
+      allSongs.push({ ...track, albumName: album.name });
+    });
+  });
+  
+  // Sort alphabetically by title
+  return allSongs.sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function renderAllSongs() {
+  const ul = $('all-songs-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  
+  const allSongs = getAllSongsSorted();
+
+  allSongs.forEach((track, i) => {
+    const li = document.createElement('li');
+    li.style.cssText = 'display:flex; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); cursor:pointer;';
+    
+    // Grabs thumbnail image for the track
+    const artUrl = getAlbumArt(track.albumName);
+    
+    li.innerHTML = `
+      <div style="width: 44px; height: 44px; border-radius: 6px; flex-shrink: 0; background: var(--bg-active); overflow: hidden; display: flex; justify-content: center; align-items: center;">
+        ${artUrl ? `<img src="${artUrl}" style="width:100%;height:100%;object-fit:cover;" />` : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:50%;color:var(--text-muted);"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`}
+      </div>
+      <div style="margin-left: 14px; flex: 1; min-width:0;">
+        <p style="font-size:1rem; font-weight:500; margin-bottom: 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(track.title)}</p>
+        <p style="font-size:0.8rem; color: var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(track.albumName)}</p>
+      </div>
+      <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:8px;" title="Add to Playlist">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    `;
+
+    // Click anywhere on row to play
+    li.addEventListener('click', (e) => {
+      if (e.target.closest('.track-add-btn')) return; // Ignore if clicking plus button
+      state.queue = allSongs;
+      state.queueIndex = i;
+      playCurrentQueueItem();
+    });
+
+    // Add to playlist button
+    li.querySelector('.track-add-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      openAddToPlaylistModal([track]);
+    });
+
+    // Right-click context menu
+    li.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      openContextMenu(e, track, null);
+    });
+
+    ul.appendChild(li);
+  });
+}
+
+function playAllSongsList(shuffleIt = false) {
+  const allSongs = getAllSongsSorted();
+  if (!allSongs.length) return;
+  
+  state.queue = allSongs;
+  
+  if (shuffleIt) {
+    shuffleArray(state.queue);
+    state.queueIndex = 0;
+  } else {
+    state.queueIndex = 0;
+  }
+  
+  playCurrentQueueItem();
 }
 
 // ── Offline caching ──────────────────────────────────────────
