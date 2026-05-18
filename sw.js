@@ -1,10 +1,9 @@
 // ============================================================
-//  SoundVault — Service Worker  v1.0
-//  Handles offline caching, background fetch, media sessions
+//  SoundVault — Service Worker  v1.0.3
 // ============================================================
 
-const CACHE_NAME     = 'soundvault-v1.0.2';
-const STATIC_ASSETS  = ['./', './index.html', './style.css', './main.js', './manifest.json'];
+const CACHE_NAME     = 'soundvault-v1.0.3';
+const STATIC_ASSETS  = ['./', './index.html', './style.css', './main.js', './visualizer.html', './manifest.json'];
 const AUDIO_CACHE    = 'soundvault-audio-v1';
 const MAX_AUDIO_CACHE_MB = 2048; // 2 GB limit for audio cache
 
