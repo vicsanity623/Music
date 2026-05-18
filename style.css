@@ -317,7 +317,7 @@ h2.section-title {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: var(--bg-active);
+  background: var(--bg-surface);
   display: flex;
   align-items: center;
   justify-content: center;
