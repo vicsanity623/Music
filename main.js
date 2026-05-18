@@ -97,9 +97,9 @@ function setupGreeting() {
   const h = new Date().getHours();
   const el = $('greeting-time');
   if (!el) return;
-  if (h < 12) el.textContent = 'morning';
-  else if (h < 17) el.textContent = 'afternoon';
-  else el.textContent = 'evening';
+  if (h < 12) el.textContent = 'AM';
+  else if (h < 17) el.textContent = 'PM';
+  else el.textContent = 'PM';
 }
 
 // ── Render everything ─────────────────────────────────────────
