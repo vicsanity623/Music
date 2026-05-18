@@ -321,42 +321,69 @@ from pathlib import Path
 albums_root = Path(sys.argv[1])
 stems_root  = Path(sys.argv[2])
 out_path    = Path(sys.argv[3])
+music_root  = out_path.parent
 
 library = {"albums": []}
 audio_exts = {".mp3", ".flac", ".m4a", ".ogg", ".wav"}
 
-for album_dir in sorted(albums_root.iterdir()):
-    if not album_dir.is_dir():
-        continue
+audio_dirs = []
+for dirpath, dirnames, filenames in os.walk(str(albums_root)):
+    dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+    path = Path(dirpath)
+    if any(f.suffix.lower() in audio_exts for f in path.iterdir() if f.is_file()):
+        audio_dirs.append(path)
+
+for album_dir in sorted(audio_dirs):
     tracks = []
+    cover_path = album_dir / "cover.jpg"
+    
+    if album_dir.parent == albums_root:
+        # Flat layout: Albums/AlbumName/
+        album_name = album_dir.name
+        artist_name = ""
+        display_name = album_name
+        stems_root_dir = stems_root / (album_dir.name + "STEMS")
+    elif album_dir.parent.parent == albums_root:
+        # Nested layout: Albums/ArtistName/AlbumName/
+        album_name = album_dir.name
+        artist_name = album_dir.parent.name
+        display_name = f"{artist_name} - {album_name}"
+        stems_root_dir = stems_root / artist_name / (album_name + "STEMS")
+    else:
+        album_name = album_dir.name
+        artist_name = album_dir.parent.name
+        display_name = f"{artist_name} - {album_name}"
+        stems_root_dir = stems_root / artist_name / (album_name + "STEMS")
+
     for f in sorted(album_dir.iterdir()):
-        if f.suffix.lower() not in audio_exts:
-            continue
-        stem_folder_name = re.sub(r'^\d+\s*[-_.]\s*', '', f.stem)
-        stem_dir = stems_root / (album_dir.name + "STEMS") / stem_folder_name
+        if f.suffix.lower() not in audio_exts: continue
+        
+        # Link stems
+        stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
+        stems_dir = stems_root_dir / stem_key
         stems = {}
-        for stem in ("vocals", "drums", "bass", "other"):
-            for ext in (".mp3", ".flac", ".wav"):
-                sp = stem_dir / (stem + ext)
-                if sp.exists():
-                    stems[stem] = str(sp.relative_to(out_path.parent))
-                    break
+        if stems_dir.exists():
+            for sn in ("vocals", "drums", "bass", "other"):
+                for ext in (".mp3", ".flac", ".wav"):
+                    sp = stems_dir / (sn + ext)
+                    if sp.exists():
+                        stems[sn] = str(sp.relative_to(music_root))
+                        break
+
         tracks.append({
-            "title":    stem_folder_name,
+            "title": f.stem if album_dir.parent == albums_root else re.sub(r"^\d+\s*[-_.]\s*", "", f.stem),
             "filename": f.name,
-            "path":     str(f.relative_to(out_path.parent)),
-            "format":   f.suffix.lstrip(".").upper(),
-            "stems":    stems,
+            "path": str(f.relative_to(music_root)),
+            "format": f.suffix.lstrip(".").upper(),
+            "stems": stems
         })
+        
     if tracks:
-        # Include cover.jpg path if art_fetch.py has already run
-        cover_jpg = album_dir / "cover.jpg"
-        art_rel   = str(cover_jpg.relative_to(out_path.parent)) if cover_jpg.exists() else ""
         library["albums"].append({
-            "name":   album_dir.name,
-            "path":   str(album_dir.relative_to(out_path.parent)),
-            "art":    art_rel,
-            "tracks": tracks,
+            "name":   display_name,
+            "path":   str(album_dir.relative_to(music_root)),
+            "art":    str(cover_path.relative_to(music_root)) if cover_path.exists() else "",
+            "tracks": tracks
         })
 
 out_path.write_text(json.dumps(library, indent=2, ensure_ascii=False))
