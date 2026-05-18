@@ -1,6 +1,9 @@
 .venv
+.venv2
+
 __pycache__
 .DS_Store
-
+download_and_stem.sh
+serve.sh
 *.crt
 *.key

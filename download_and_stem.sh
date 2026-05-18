@@ -110,6 +110,20 @@ stem_track() {
   local stem_out_dir="$2" # where to write the 4 stems
   local track_name="$3"   # display name
 
+  # Check if all 4 stems already exist to avoid redundant CPU/GPU processing
+  local stems_exist=true
+  for stem in vocals drums bass other; do
+    if [[ ! -f "$stem_out_dir/${stem}.${STEMS_FMT}" ]]; then
+      stems_exist=false
+      break
+    fi
+  done
+
+  if $stems_exist; then
+    ok "  Stems already exist for: $track_name (skipping stem step)"
+    return 0
+  fi
+
   log "Stemming: $track_name"
   log "  Model : $DEMUCS_MODEL"
   log "  Output: $stem_out_dir"
@@ -146,9 +160,9 @@ stem_track() {
     if [[ -f "$wav_in" ]]; then
       local out_file="$stem_out_dir/${stem}.${STEMS_FMT}"
       if [[ "$STEMS_FMT" == "flac" ]]; then
-        ffmpeg -y -i "$wav_in" -c:a flac "$out_file" -loglevel error
+        ffmpeg -nostdin -y -i "$wav_in" -c:a flac "$out_file" -loglevel error
       else
-        ffmpeg -y -i "$wav_in" -c:a libmp3lame -b:a "${STEMS_QUALITY}k" "$out_file" -loglevel error
+        ffmpeg -nostdin -y -i "$wav_in" -c:a libmp3lame -b:a "${STEMS_QUALITY}k" "$out_file" -loglevel error
       fi
       ok "  Stem saved → $out_file"
     else
@@ -187,7 +201,7 @@ process_album() {
   log "Found $total track(s) in playlist"
 
   local track_num=1
-  while IFS= read -r track_url; do
+  while IFS= read -u 3 -r track_url; do
     [[ -z "$track_url" ]] && continue
 
     echo ""
@@ -247,7 +261,7 @@ process_album() {
 
     ok "Track $track_num complete ✓"
     ((track_num++))
-  done <<< "$url_list"
+  done 3<<< "$url_list"
 
   header "Album complete: $album_name"
   echo -e "  Audio  → ${CYAN}$album_dir${NC}"
