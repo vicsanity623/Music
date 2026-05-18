@@ -281,6 +281,223 @@ h2.section-title {
   color: var(--text-primary);
 }
 
+/* ── Library Category List (Apple Music style) ─────────────── */
+.library-category-list {
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.library-category-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background var(--t);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.library-category-item:last-child {
+  border-bottom: none;
+}
+
+.library-category-item:hover {
+  background: var(--bg-hover);
+}
+
+.library-category-item:active {
+  background: var(--bg-active);
+}
+
+.lib-cat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lib-cat-icon svg {
+  width: 16px;
+  height: 16px;
+  color: var(--gold);
+}
+
+.lib-cat-label {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.lib-cat-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ── Sub-view header ───────────────────────────────────────── */
+.sub-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+/* ── Songs actions bar ─────────────────────────────────────── */
+.songs-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* ── Songs track list (with album art thumbnails) ──────────── */
+.songs-track-list li {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--t);
+  user-select: none;
+}
+
+.songs-track-list li:hover {
+  background: var(--bg-hover);
+}
+
+.song-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.song-info {
+  min-width: 0;
+}
+
+.song-info .track-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.song-info .player-album {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Artists list ──────────────────────────────────────────── */
+.artists-list {
+  list-style: none;
+}
+
+.artist-list-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--t);
+  user-select: none;
+}
+
+.artist-list-item:hover {
+  background: var(--bg-hover);
+}
+
+.artist-list-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+
+.artist-list-avatar svg {
+  width: 22px;
+  height: 22px;
+  color: var(--text-muted);
+}
+
+.artist-list-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.artist-list-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.artist-list-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ── Artist detail hero ────────────────────────────────────── */
+.artist-hero {
+  display: flex;
+  gap: 28px;
+  align-items: flex-end;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.artist-avatar {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: var(--bg-active);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  border: 2px solid var(--border-hi);
+}
+
+.artist-avatar svg {
+  width: 50%;
+  height: 50%;
+  color: var(--text-muted);
+}
+
 /* ── Card grid ─────────────────────────────────────────────── */
 .card-grid {
   display: grid;
@@ -1092,114 +1309,6 @@ h2.section-title {
   color: var(--text-muted);
 }
 
-/* Stems panel */
-#stems-tracks {
-  padding: 14px 18px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.stem-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.stem-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  width: 48px;
-  flex-shrink: 0;
-}
-
-.stem-label.vocals {
-  color: #e8a0d0;
-}
-
-.stem-label.drums {
-  color: #a0d0e8;
-}
-
-.stem-label.bass {
-  color: #c8a96e;
-}
-
-.stem-label.other {
-  color: #a0e8a0;
-}
-
-.stem-solo {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  padding: 2px 7px;
-  cursor: pointer;
-  transition: all var(--t);
-}
-
-.stem-solo.active {
-  border-color: var(--gold);
-  color: var(--gold);
-}
-
-.stem-vol {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  height: 4px;
-  background: var(--bg-active);
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-}
-
-.stem-vol::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.stem-row:nth-child(1) .stem-vol::-webkit-slider-thumb {
-  background: #e8a0d0;
-}
-
-.stem-row:nth-child(2) .stem-vol::-webkit-slider-thumb {
-  background: #a0d0e8;
-}
-
-.stem-row:nth-child(3) .stem-vol::-webkit-slider-thumb {
-  background: #c8a96e;
-}
-
-.stem-row:nth-child(4) .stem-vol::-webkit-slider-thumb {
-  background: #a0e8a0;
-}
-
-.stem-mute {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 2px;
-  transition: color var(--t);
-  font-size: 1rem;
-}
-
-.stem-mute:hover {
-  color: var(--text-primary);
-}
-
-.stem-mute.muted {
-  color: #ff6060;
-}
-
 /* Queue panel */
 #queue-list {
   list-style: none;
@@ -1523,6 +1632,17 @@ h2.section-title {
     height: 160px;
   }
 
+  .artist-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .artist-avatar {
+    width: 120px;
+    height: 120px;
+  }
+
   .volume-wrap {
     display: none;
   }
@@ -1609,6 +1729,11 @@ h2.section-title {
     height: 130px;
   }
 
+  .artist-avatar {
+    width: 100px;
+    height: 100px;
+  }
+
   .album-meta h1 {
     font-size: 1.6rem;
   }
@@ -1621,6 +1746,14 @@ h2.section-title {
   .volume-wrap {
     display: none;
   }
+
+  .library-category-item {
+    padding: 16px;
+  }
+
+  .lib-cat-label {
+    font-size: 1rem;
+  }
 }
 
 /* ── iOS safe areas ────────────────────────────────────────── */
@@ -1631,8 +1764,6 @@ h2.section-title {
     min-height: var(--player-h);
   }
 
-  /* On mobile PWA (standalone), the status bar sits on top of the viewport.
-     Ensure the bottom nav also clears the home indicator on iPhone. */
   @media (max-width: 600px) {
     #mobile-nav {
       padding-bottom: max(env(safe-area-inset-bottom), 8px);
