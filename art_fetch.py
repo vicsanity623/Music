@@ -16,7 +16,7 @@ Requirements:
   pip3 install mutagen requests
 """
 
-import argparse, json, os, re, sys, time
+import argparse, json, os, re, sys, time, shutil
 from pathlib import Path
 
 try:
@@ -120,13 +120,21 @@ def embed_art(path, data, mime="image/jpeg"):
     except Exception as e:
         print(f"  ✗ Embed failed: {e}"); return False
 
-def write_title_tag(path, title, artist):
+def write_metadata(path, title, artist, album):
     try:
-        a = MP3(path)
-        if a.tags is None: a.add_tags()
-        a.tags["TIT2"] = TIT2(encoding=3, text=title)
-        if artist: a.tags["TPE1"] = TPE1(encoding=3, text=artist)
-        a.save()
+        if path.suffix.lower() == ".mp3":
+            a = MP3(path)
+            if a.tags is None: a.add_tags()
+            a.tags["TIT2"] = TIT2(encoding=3, text=title)
+            a.tags["TPE1"] = TPE1(encoding=3, text=artist)
+            a.tags["TALB"] = TIT2(encoding=3, text=album) # TALB is Album
+            a.save()
+        elif path.suffix.lower() == ".flac":
+            a = FLAC(path)
+            a["title"] = title
+            a["artist"] = artist
+            a["album"] = album
+            a.save()
     except Exception as e:
         print(f"  ✗ Tag write failed: {e}")
 
@@ -186,124 +194,145 @@ def search_mb(title, artist=""):
             }
     return None
 
-# ── Process one album directory ───────────────────────────────────────────────
 def process_album(album_dir, dry_run=False):
-    print(f"\n{'[DRY RUN] ' if dry_run else ''}📀  {album_dir.name}")
+    """
+    Processes files in a directory. If individual tracks are identified as 
+    belonging to different albums, they are moved to proper Artist/Album folders.
+    """
+    print(f"\n{'[DRY RUN] ' if dry_run else ''}📂 Scanning: {album_dir.name}")
     audio_files = sorted(f for f in album_dir.iterdir()
                          if f.is_file() and f.suffix.lower() in AUDIO_EXTS)
+    
     if not audio_files:
-        print("  (no audio files)"); return None
-
-    cover_path  = album_dir / "cover.jpg"
-    cover_data  = None   # shared across all tracks in album
-    tracks      = []
+        return None
 
     for f in audio_files:
         print(f"\n  🎵  {f.name}")
-        tags        = read_tags(f)
-        raw_title   = tags["title"] or f.stem
-        raw_artist  = tags["artist"]
-        cleaned     = clean_title(raw_title)
-        print(f"      title  : \"{raw_title}\" → \"{cleaned}\"")
-        if raw_artist: print(f"      artist : {raw_artist}")
+        tags = read_tags(f)
+        raw_title, raw_artist = tags["title"] or f.stem, tags["artist"]
+        cleaned = clean_title(raw_title)
 
-        # MusicBrainz lookup — try progressively broader queries
-        mb = None
-        if cleaned:
-            print(f"      MB     : searching…", end=" ", flush=True)
-            mb = search_mb(cleaned, raw_artist)
+        # 1. Research Track
+        mb = search_mb(cleaned, raw_artist)
+        if not mb and " - " in raw_title:
+            filename_artist = raw_title.split(" - ", 1)[0].replace("_", " ").strip()
+            mb = search_mb(cleaned, filename_artist)
+        if not mb: mb = search_mb(cleaned)
 
-            # If tag artist looks like a YT channel, try artist from filename
-            if not mb and " - " in raw_title:
-                filename_artist = raw_title.split(" - ", 1)[0].replace("_", " ").strip()
-                if filename_artist.lower() != (raw_artist or "").lower():
-                    mb = search_mb(cleaned, filename_artist)
+        if mb:
+            print(f"      Match  : \"{mb['title']}\" by {mb['artist']} from album \"{mb['album']}\"")
+            final_title, final_artist, final_album = mb['title'], mb['artist'], mb['album']
+        else:
+            print(f"      No match found. Using folder/tag info.")
+            final_title, final_artist, final_album = cleaned, raw_artist or "Unknown Artist", album_dir.name
 
-            # Last resort: title-only search
-            if not mb:
-                mb = search_mb(cleaned)
-
-            if mb:
-                print(f"✓  \"{mb['title']}\"  ({mb['album']})")
-            else:
-                print("✗  no match")
-
-        official_title  = mb["title"]  if mb else cleaned
-        official_artist = mb["artist"] if mb else raw_artist
-
-        # Fetch cover art once per album
-        if cover_data is None and mb:
-            print(f"      art    : fetching…", end=" ", flush=True)
-            art = fetch_caa(mb["release"])
-            if art:
-                cover_data = art
-                print(f"✓  {len(art)//1024}KB")
-                if not dry_run:
-                    cover_path.write_bytes(art)
-            else:
-                print("✗  not in CAA")
-
-        # Fallback: use already-embedded YouTube thumbnail
-        if cover_data is None:
-            embedded = extract_embedded_art(f)
-            if embedded:
-                cover_data = embedded
-                print(f"      art    : using embedded YT thumbnail")
-                if not dry_run:
-                    cover_path.write_bytes(embedded)
-
-        # Embed art + write tags
-        if not dry_run:
-            if cover_data:
-                embed_art(f, cover_data)
-            if official_title and official_title != raw_title and f.suffix.lower() == ".mp3":
-                write_title_tag(f, official_title, official_artist)
-
-        # Rename file
+        # 2. Determine Destination
+        # Pattern: Albums/Artist Name/Album Name/
+        dest_dir = ALBUMS_DIR / safe_name(final_artist) / safe_name(final_album)
+        
         prefix_m = re.match(r"^(\d+\s*[-_.]\s*)", f.stem)
-        prefix   = prefix_m.group(1) if prefix_m else ""
-        new_name = prefix + safe_name(official_title) + f.suffix
-        new_path = f.parent / new_name
+        prefix = prefix_m.group(1) if prefix_m else ""
+        new_filename = prefix + safe_name(final_title) + f.suffix
+        new_path = dest_dir / new_filename
 
-        if new_name != f.name:
-            print(f"      rename : \"{f.name}\"")
-            print(f"             → \"{new_name}\"")
-            if not dry_run and not new_path.exists():
-                f.rename(new_path)
-                f = new_path
+        if not dry_run:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 3. Fetch/Update Art in the NEW destination
+            art_path = dest_dir / "cover.jpg"
+            if not art_path.exists() and mb:
+                print(f"      Art    : fetching…", end=" ", flush=True)
+                art = fetch_caa(mb["release"])
+                if art: 
+                    art_path.write_bytes(art)
+                    print(f"✓")
+                else: print("✗")
 
-        # Stems lookup
-        stem_key     = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
-        stems_dir    = STEMS_DIR / (album_dir.name + "STEMS") / stem_key
-        stems        = {}
-        for sn in ("vocals", "drums", "bass", "other"):
-            for ext in (".mp3", ".flac", ".wav"):
-                sp = stems_dir / (sn + ext)
-                if sp.exists():
-                    stems[sn] = str(sp.relative_to(MUSIC_ROOT)); break
+            # 4. Update Tags & Relocate Audio
+            write_metadata(f, final_title, final_artist, final_album)
+            
+            # 5. Handle Stems Relocation
+            stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
+            old_stems_path = STEMS_DIR / (album_dir.name + "STEMS") / stem_key
+            new_stems_root = STEMS_DIR / safe_name(final_artist) / (safe_name(final_album) + "STEMS")
+            new_stems_path = new_stems_root / safe_name(final_title)
 
-        tracks.append({
-            "title":    official_title,
-            "filename": f.name,
-            "path":     str(f.relative_to(MUSIC_ROOT)),
-            "format":   f.suffix.lstrip(".").upper(),
-            "stems":    stems,
-        })
+            if old_stems_path.exists():
+                print(f"      Stems  : Relocating to {new_stems_path.relative_to(STEMS_DIR)}")
+                new_stems_root.mkdir(parents=True, exist_ok=True)
+                if old_stems_path != new_stems_path:
+                    shutil.move(str(old_stems_path), str(new_stems_path))
 
-    art_rel = str(cover_path.relative_to(MUSIC_ROOT)) if cover_path.exists() else ""
-    return {
-        "name":   album_dir.name,
-        "path":   str(album_dir.relative_to(MUSIC_ROOT)),
-        "art":    art_rel,
-        "tracks": tracks,
-    }
+            # Move audio file last
+            if f != new_path:
+                print(f"      Move   : → {new_path.relative_to(ALBUMS_DIR)}")
+                if new_path.exists(): os.remove(new_path) # Overwrite if exact match exists
+                shutil.move(str(f), str(new_path))
+
+    # Clean up empty old folder (if it was an unsorted/playlist folder)
+    if not dry_run and album_dir != ALBUMS_DIR:
+        try:
+            if not any(album_dir.iterdir()): 
+                album_dir.rmdir()
+                # Also try cleaning up stems folder
+                old_stems_parent = STEMS_DIR / (album_dir.name + "STEMS")
+                if old_stems_parent.exists() and not any(old_stems_parent.iterdir()):
+                    old_stems_parent.rmdir()
+        except: pass
+
+    return None # Index rebuilding is handled in main() by scanning the whole dir
 
 # ── Rebuild library.json ──────────────────────────────────────────────────────
-def build_index(albums):
-    library = {"albums": [a for a in albums if a]}
-    INDEX_FILE.write_text(json.dumps(library, indent=2, ensure_ascii=False))
-    print(f"\n✅  library.json written  ({len(library['albums'])} albums)  →  {INDEX_FILE}")
+def build_index(unused_albums_list):
+    """Re-scans the entire Albums directory to build a fresh library.json"""
+    print("\n🔍 Rebuilding library index...")
+    albums = []
+    
+    # Walk through Artist/Album structure
+    for artist_dir in sorted(ALBUMS_DIR.iterdir()):
+        if not artist_dir.is_dir() or artist_dir.name.startswith('.'): continue
+        
+        for album_dir in sorted(artist_dir.iterdir()):
+            if not album_dir.is_dir(): continue
+            
+            tracks = []
+            cover_path = album_dir / "cover.jpg"
+            
+            for f in sorted(album_dir.iterdir()):
+                if f.suffix.lower() not in AUDIO_EXTS: continue
+                
+                # Link stems based on new Artist/Album/Track structure
+                stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
+                stems_dir = STEMS_DIR / artist_dir.name / (album_dir.name + "STEMS") / stem_key
+                stems = {}
+                if stems_dir.exists():
+                    for sn in ("vocals", "drums", "bass", "other"):
+                        for ext in (".mp3", ".flac", ".wav"):
+                            sp = stems_dir / (sn + ext)
+                            if sp.exists():
+                                stems[sn] = str(sp.relative_to(MUSIC_ROOT))
+                                break
 
+                tracks.append({
+                    "title": f.stem,
+                    "filename": f.name,
+                    "path": str(f.relative_to(MUSIC_ROOT)),
+                    "format": f.suffix.lstrip(".").upper(),
+                    "stems": stems
+                })
+            
+            if tracks:
+                albums.append({
+                    "name": f"{artist_dir.name} - {album_dir.name}",
+                    "path": str(album_dir.relative_to(MUSIC_ROOT)),
+                    "art": str(cover_path.relative_to(MUSIC_ROOT)) if cover_path.exists() else "",
+                    "tracks": tracks
+                })
+
+    library = {"albums": albums}
+    INDEX_FILE.write_text(json.dumps(library, indent=2, ensure_ascii=False))
+    print(f"✅ library.json updated with {len(albums)} albums.")
+    
 # ── Entry point ───────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser(description="SoundVault art fetcher + renamer")

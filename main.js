@@ -12,21 +12,21 @@ const LIBRARY_URL = `${BASE_URL}/library.json`;
 
 // ── State ─────────────────────────────────────────────────────
 const state = {
-  library:       null,   // { albums: [...] }
-  queue:         [],     // [{title, album, path, stems, format}]
-  queueIndex:    -1,
-  shuffle:       false,
-  repeat:        'none', // 'none' | 'one' | 'all'
-  isPlaying:     false,
-  currentTrack:  null,
-  playlists:     [],     // [{id, name, tracks:[...]}]
-  liked:         new Set(),
-  view:          'home',
-  albumView:     null,   // current album name in detail view
-  playlistView:  null,   // current playlist id
-  ctxTrack:      null,   // track targeted by context menu
+  library: null,   // { albums: [...] }
+  queue: [],     // [{title, album, path, stems, format}]
+  queueIndex: -1,
+  shuffle: false,
+  repeat: 'none', // 'none' | 'one' | 'all'
+  isPlaying: false,
+  currentTrack: null,
+  playlists: [],     // [{id, name, tracks:[...]}]
+  liked: new Set(),
+  view: 'home',
+  albumView: null,   // current album name in detail view
+  playlistView: null,   // current playlist id
+  ctxTrack: null,   // track targeted by context menu
   ctxPlaylistId: null,
-  audioCtx:      null,
+  audioCtx: null,
 };
 
 // ── Audio engine ──────────────────────────────────────────────
@@ -68,7 +68,7 @@ function persist() {
   try {
     localStorage.setItem('sv_playlists', JSON.stringify(state.playlists));
     localStorage.setItem('sv_liked', JSON.stringify([...state.liked]));
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // ── Load library ─────────────────────────────────────────────
@@ -97,9 +97,9 @@ function setupGreeting() {
   const h = new Date().getHours();
   const el = $('greeting-time');
   if (!el) return;
-  if (h < 12) el.textContent = 'morning';
-  else if (h < 17) el.textContent = 'afternoon';
-  else el.textContent = 'evening';
+  if (h < 12) el.textContent = 'AM';
+  else if (h < 17) el.textContent = 'PM';
+  else el.textContent = 'PM';
 }
 
 // ── Render everything ─────────────────────────────────────────
@@ -135,9 +135,9 @@ function renderLibraryAlbums() {
   let albums = [...state.library.albums];
   const sort = $('library-sort')?.value || 'newest';
   if (sort === 'a-z') {
-    albums.sort((a,b) => a.name.localeCompare(b.name));
+    albums.sort((a, b) => a.name.localeCompare(b.name));
   } else if (sort === 'z-a') {
-    albums.sort((a,b) => b.name.localeCompare(a.name));
+    albums.sort((a, b) => b.name.localeCompare(a.name));
   } else {
     albums.reverse();
   }
@@ -162,7 +162,7 @@ function artInnerHTML(artUrl, hue, size = '40%') {
 function makeAlbumCard(album, idx) {
   const card = document.createElement('div');
   card.className = 'album-card';
-  const hue    = idx % 5;
+  const hue = idx % 5;
   const artUrl = album.art ? `${BASE_URL}/${album.art}` : null;
   card.innerHTML = `
     <div class="card-art" data-hue="${artUrl ? '' : hue}" style="${artUrl ? 'background:#111118;' : ''}">
@@ -226,7 +226,7 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
     li.addEventListener('click', () => playTrackFromContext(tracks, i, albumName));
     li.querySelector('.track-add-btn').addEventListener('click', e => {
       e.stopPropagation();
-      openAddToPlaylistModal([{...track, albumName}]);
+      openAddToPlaylistModal([{ ...track, albumName }]);
     });
     li.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -340,7 +340,7 @@ audio.addEventListener('ended', () => {
   playCurrentQueueItem();
 });
 
-audio.addEventListener('play',  () => { state.isPlaying = true;  setPlayPauseIcon(true); });
+audio.addEventListener('play', () => { state.isPlaying = true; setPlayPauseIcon(true); });
 audio.addEventListener('pause', () => { state.isPlaying = false; setPlayPauseIcon(false); });
 
 function setPlayPauseIcon(playing) {
@@ -354,13 +354,13 @@ const progressTrack = $('progress-track');
 
 function scrubTo(e) {
   const rect = progressTrack.getBoundingClientRect();
-  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   if (audio.duration) audio.currentTime = pct * audio.duration;
 }
 
 progressTrack.addEventListener('mousedown', e => { isScrubbing = true; scrubTo(e); });
-document.addEventListener('mousemove',  e => { if (isScrubbing) scrubTo(e); });
-document.addEventListener('mouseup',    ()  => { isScrubbing = false; });
+document.addEventListener('mousemove', e => { if (isScrubbing) scrubTo(e); });
+document.addEventListener('mouseup', () => { isScrubbing = false; });
 progressTrack.addEventListener('touchstart', e => { isScrubbing = true; scrubTo(e.touches[0]); }, { passive: true });
 document.addEventListener('touchmove', e => { if (isScrubbing) scrubTo(e.touches[0]); }, { passive: true });
 document.addEventListener('touchend', () => { isScrubbing = false; });
@@ -434,7 +434,7 @@ function setupEventListeners() {
   });
   $('btn-add-album-to-playlist').addEventListener('click', () => {
     const album = state.library?.albums.find(a => a.name === state.albumView);
-    if (album) openAddToPlaylistModal(album.tracks.map(t => ({...t, albumName: album.name})));
+    if (album) openAddToPlaylistModal(album.tracks.map(t => ({ ...t, albumName: album.name })));
   });
 
   // Back from album detail
@@ -487,7 +487,7 @@ function setupEventListeners() {
 
   $('btn-add-playlist-player')?.addEventListener('click', () => {
     if (state.currentTrack) {
-      openAddToPlaylistModal([{...state.currentTrack, albumName: state.currentTrack.albumName}]);
+      openAddToPlaylistModal([{ ...state.currentTrack, albumName: state.currentTrack.albumName }]);
     }
   });
 
@@ -640,7 +640,7 @@ function openContextMenu(e, track, playlistId) {
   const x = Math.min(e.clientX, window.innerWidth - 200);
   const y = Math.min(e.clientY, window.innerHeight - 200);
   menu.style.left = x + 'px';
-  menu.style.top  = y + 'px';
+  menu.style.top = y + 'px';
   $('ctx-remove-playlist').classList.toggle('hidden', !playlistId);
 }
 function hideContextMenu() { $('context-menu').classList.add('hidden'); }
@@ -692,16 +692,18 @@ function openNewPlaylistModal() {
   openModal('New Playlist', `
     <input type="text" id="new-pl-name" placeholder="Playlist name…" maxlength="80" />
   `, [
-    { label: 'Create', cls: 'btn-gold', action: () => {
-      const name = $('new-pl-name').value.trim() || 'My Playlist';
-      const pl = { id: `pl_${Date.now()}`, name, tracks: [] };
-      state.playlists.push(pl);
-      persist();
-      renderSidebarPlaylists();
-      renderMobilePlaylists();
-      closeModal();
-      openPlaylistDetail(pl);
-    }}
+    {
+      label: 'Create', cls: 'btn-gold', action: () => {
+        const name = $('new-pl-name').value.trim() || 'My Playlist';
+        const pl = { id: `pl_${Date.now()}`, name, tracks: [] };
+        state.playlists.push(pl);
+        persist();
+        renderSidebarPlaylists();
+        renderMobilePlaylists();
+        closeModal();
+        openPlaylistDetail(pl);
+      }
+    }
   ]);
   setTimeout(() => $('new-pl-name')?.focus(), 100);
 }
@@ -710,12 +712,12 @@ function openAddToPlaylistModal(tracks) {
   let bodyHtml = `
     <div id="pl-modal-list" style="max-height: 220px; overflow-y: auto; margin-bottom: 16px;">
       ${state.playlists.map(pl => {
-        const inPl = tracks.every(t => pl.tracks.some(pt => pt.path === t.path));
-        return `<div class="modal-pl-item${inPl ? ' in-playlist' : ''}" data-pl="${pl.id}">
+    const inPl = tracks.every(t => pl.tracks.some(pt => pt.path === t.path));
+    return `<div class="modal-pl-item${inPl ? ' in-playlist' : ''}" data-pl="${pl.id}">
           <span>${escHtml(pl.name)}</span>
           <span class="add-check">✓</span>
         </div>`;
-      }).join('')}
+  }).join('')}
       ${!state.playlists.length ? '<p style="color:var(--text-muted);font-size:.88rem;margin-bottom:12px;">No playlists yet.</p>' : ''}
     </div>
     <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px;">
@@ -755,7 +757,7 @@ function openAddToPlaylistModal(tracks) {
     const name = quickInput.value.trim() || 'My Playlist';
     const plId = `pl_${Date.now()}`;
     const newPl = { id: plId, name, tracks: [] };
-    
+
     // Add selected tracks to the new playlist
     tracks.forEach(t => {
       newPl.tracks.push(t);
@@ -856,7 +858,7 @@ function handleSearch() {
       });
       li.querySelector('.track-add-btn').addEventListener('click', e => {
         e.stopPropagation();
-        openAddToPlaylistModal([{...track, albumName: track.albumName}]);
+        openAddToPlaylistModal([{ ...track, albumName: track.albumName }]);
       });
       li.addEventListener('contextmenu', e => {
         e.preventDefault();
@@ -876,10 +878,10 @@ function handleSearch() {
 // ── Media Session API (lockscreen controls) ───────────────────
 function setupMediaSession() {
   if (!('mediaSession' in navigator)) return;
-  navigator.mediaSession.setActionHandler('play',           togglePlayPause);
-  navigator.mediaSession.setActionHandler('pause',          togglePlayPause);
-  navigator.mediaSession.setActionHandler('nexttrack',      playNext);
-  navigator.mediaSession.setActionHandler('previoustrack',  playPrev);
+  navigator.mediaSession.setActionHandler('play', togglePlayPause);
+  navigator.mediaSession.setActionHandler('pause', togglePlayPause);
+  navigator.mediaSession.setActionHandler('nexttrack', playNext);
+  navigator.mediaSession.setActionHandler('previoustrack', playPrev);
   navigator.mediaSession.setActionHandler('seekto', e => {
     if (audio.duration) audio.currentTime = e.seekTime;
   });
@@ -887,9 +889,9 @@ function setupMediaSession() {
 function updateMediaSession(track) {
   if (!('mediaSession' in navigator)) return;
   navigator.mediaSession.metadata = new MediaMetadata({
-    title:  track.title,
+    title: track.title,
     artist: track.albumName || 'SoundVault',
-    album:  track.albumName || '',
+    album: track.albumName || '',
   });
   navigator.mediaSession.playbackState = 'playing';
 }
@@ -917,7 +919,7 @@ function showToast(msg, type = 'info') {
 
 // ── Utilities ─────────────────────────────────────────────────
 function escHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function formatTime(sec) {
