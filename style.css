@@ -334,7 +334,7 @@ h2.section-title {
   flex: 1;
   font-size: 0.95rem;
   font-weight: 500;
-  color: var(--text-primary);
+  color: #fa243c;
 }
 
 .lib-cat-chevron {
