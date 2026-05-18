@@ -557,6 +557,45 @@ function setupEventListeners() {
   $('search-input').addEventListener('input', debounce(handleSearch, 150));
 }
 
+(function setupVisualizer() {
+  // Wait for DOM to be ready (safe if DOMContentLoaded already fired)
+  function init() {
+    const btn = document.getElementById('btn-visualizer');
+    if (!btn) return; // button not in HTML yet — add it first
+
+    btn.addEventListener('click', openVisualizer);
+  }
+
+  function openVisualizer() {
+    if (!state.currentTrack) {
+      showToast('Play a track first', 'warn');
+      return;
+    }
+
+    // Write current track info to sessionStorage so visualizer.html can read it
+    const trackURL = `${BASE_URL}/${state.currentTrack.path}`;
+    sessionStorage.setItem('sv_viz_src',   trackURL);
+    sessionStorage.setItem('sv_viz_title', state.currentTrack.title    || '');
+    sessionStorage.setItem('sv_viz_album', state.currentTrack.albumName || '');
+
+    // Open in a new window — visualizer.html will grab audio-engine via window.opener
+    const w = window.open('visualizer.html', 'sv_visualizer',
+      'width=' + screen.availWidth + ',height=' + screen.availHeight);
+
+    // If popup was blocked, fall back to same-tab navigation
+    if (!w || w.closed || typeof w.closed === 'undefined') {
+      window.location.href = 'visualizer.html';
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+
 // ── View switching ────────────────────────────────────────────
 function switchView(viewName) {
   state.view = viewName;
