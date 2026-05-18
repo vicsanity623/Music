@@ -10,6 +10,7 @@ set -euo pipefail
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
+# ── Paths (SSD is the canonical music store) ─────────────────
 MUSIC_ROOT="${MUSIC_ROOT:-/Volumes/XTRA/PYOB2026MAY/MusicLibrary}"
 WEB_ROOT="${WEB_ROOT:-/Volumes/XTRA/PYOB2026MAY/MusicLibrary/web}"
 PORT="${PORT:-8080}"
@@ -19,27 +20,26 @@ ok()   { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 err()  { echo -e "${RED}[ERR]${NC}   $*" >&2; }
 
-# ── Copy web app files into the music root if not yet there ──
+# ── Prepare web root: symlink app files + media dirs ─────────
 prepare_web_root() {
-  mkdir -p "$WEB_ROOT"
-  local script_dir="$(cd "$(dirname "$0")" && pwd)"
+  local script_dir
+  script_dir="$(cd "$(dirname "$0")" && pwd)"
 
-  # Link web app files
+  mkdir -p "$WEB_ROOT"
+
+  # Always refresh app file symlinks so stale links self-heal
   for f in index.html main.js style.css manifest.json sw.js; do
     [[ -e "$script_dir/$f" ]] && ln -sf "$script_dir/$f" "$WEB_ROOT/$f"
   done
 
-  # Symlink Albums and STEMS into the web root so the server
-  # can serve them from a single directory tree
-  local albums_link="$WEB_ROOT/Albums"
-  local stems_link="$WEB_ROOT/STEMS"
-  local lib_link="$WEB_ROOT/library.json"
+  # Symlink media dirs (force-refresh to catch path changes)
+  ln -sf "$MUSIC_ROOT/Albums"       "$WEB_ROOT/Albums"
+  ln -sf "$MUSIC_ROOT/STEMS"        "$WEB_ROOT/STEMS"
+  ln -sf "$MUSIC_ROOT/library.json" "$WEB_ROOT/library.json" 2>/dev/null || true
 
-  [[ -e "$albums_link" ]] || ln -sf "$MUSIC_ROOT/Albums" "$albums_link"
-  [[ -e "$stems_link"  ]] || ln -sf "$MUSIC_ROOT/STEMS"  "$stems_link"
-  [[ -e "$lib_link"    ]] || ln -sf "$MUSIC_ROOT/library.json" "$lib_link" 2>/dev/null || true
-
-  ok "Web root ready → $WEB_ROOT"
+  log "Music root : $MUSIC_ROOT"
+  log "Web root   : $WEB_ROOT"
+  ok  "Web root ready"
 }
 
 # ── Start Python HTTP server ──────────────────────────────────

@@ -32,7 +32,7 @@ except ImportError:
     sys.exit("Missing: pip3 install mutagen")
 
 # ── Config ────────────────────────────────────────────────────────────────────
-MUSIC_ROOT = Path(os.environ.get("MUSIC_ROOT", Path.home() / "MusicLibrary"))
+MUSIC_ROOT = Path(os.environ.get("MUSIC_ROOT", "/Volumes/XTRA/PYOB2026MAY/MusicLibrary"))
 ALBUMS_DIR = MUSIC_ROOT / "Albums"
 STEMS_DIR  = MUSIC_ROOT / "STEMS"
 INDEX_FILE = MUSIC_ROOT / "library.json"
