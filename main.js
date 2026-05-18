@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ── Service Worker ────────────────────────────────────────────
 function registerSW() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(console.warn);
+    navigator.serviceWorker.register('./sw.js').catch(console.warn);
   }
 }
 

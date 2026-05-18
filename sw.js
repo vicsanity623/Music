@@ -4,7 +4,7 @@
 // ============================================================
 
 const CACHE_NAME     = 'soundvault-v1';
-const STATIC_ASSETS  = ['/', '/index.html', '/style.css', '/main.js', '/manifest.json'];
+const STATIC_ASSETS  = ['./', './index.html', './style.css', './main.js', './manifest.json'];
 const AUDIO_CACHE    = 'soundvault-audio-v1';
 const MAX_AUDIO_CACHE_MB = 2048; // 2 GB limit for audio cache
 
