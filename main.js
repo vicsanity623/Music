@@ -527,10 +527,7 @@ function setupEventListeners() {
     }
     hideContextMenu();
   });
-  $('ctx-stems').addEventListener('click', () => {
-    if (state.ctxTrack) openStemsPanelForTrack(state.ctxTrack);
-    hideContextMenu();
-  });
+
 
   // Hide context menu on outside click
   document.addEventListener('click', e => {
@@ -626,8 +623,6 @@ function openContextMenu(e, track, playlistId) {
   menu.style.left = x + 'px';
   menu.style.top  = y + 'px';
   $('ctx-remove-playlist').classList.toggle('hidden', !playlistId);
-  const hasStems = track.stems && Object.keys(track.stems).length > 0;
-  $('ctx-stems').style.display = hasStems ? '' : 'none';
 }
 function hideContextMenu() { $('context-menu').classList.add('hidden'); }
 
