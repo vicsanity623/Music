@@ -1448,6 +1448,72 @@ h2.section-title {
   color: var(--text-muted);
 }
 
+/* ── Apple Music Style Library Menu ── */
+.library-menu {
+  list-style: none;
+  margin-bottom: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.library-menu li {
+  display: flex;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t);
+}
+
+.library-menu li:hover {
+  background: var(--bg-hover);
+}
+
+.library-menu li svg {
+  width: 24px;
+  height: 24px;
+  margin-right: 16px;
+  color: #fa243c; /* Apple Music Red tint */
+}
+
+.library-menu .chevron {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  font-weight: 300;
+}
+
+/* ── Songs View Buttons ── */
+.action-buttons-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.action-btn-half {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: #fa243c; /* Apple Music Red tint */
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t), transform var(--t);
+}
+
+.action-btn-half:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
 /* ── Mobile nav ────────────────────────────────────────────── */
 #mobile-nav {
   display: none;
