@@ -98,18 +98,21 @@ PYEOF
 start_tailscale_funnel() {
   log "Setting up Tailscale Funnel…"
 
-  if ! command -v tailscale &>/dev/null; then
+  TS_CMD="tailscale"
+  if [[ -x "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]]; then
+    TS_CMD="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+  elif ! command -v tailscale &>/dev/null; then
     err "tailscale CLI not found. Install from https://tailscale.com/download"
     return 1
   fi
 
   # Start the funnel pointing at the local server port
   # This exposes https://<machine>.tailnet-name.ts.net/ publicly
-  tailscale funnel --bg "$PORT"
+  $TS_CMD funnel --bg "$PORT"
   echo ""
   ok "Tailscale Funnel active!"
   log "Your public HTTPS URL:"
-  tailscale funnel status 2>/dev/null || tailscale status --json 2>/dev/null | python3 -c "
+  $TS_CMD funnel status 2>/dev/null || $TS_CMD status --json 2>/dev/null | python3 -c "
 import sys,json; d=json.load(sys.stdin)
 dns=d.get('Self',{}).get('DNSName','').rstrip('.')
 if dns: print(f'  https://{dns}')
@@ -118,7 +121,11 @@ if dns: print(f'  https://{dns}')
 
 stop_tailscale_funnel() {
   log "Stopping Tailscale Funnel…"
-  tailscale funnel off 2>/dev/null || true
+  TS_CMD="tailscale"
+  if [[ -x "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]]; then
+    TS_CMD="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+  fi
+  $TS_CMD funnel off 2>/dev/null || true
   ok "Funnel stopped"
 }
 
