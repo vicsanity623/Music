@@ -189,9 +189,9 @@ function openAlbumDetail(album) {
   $('detail-art').innerHTML = artInnerHTML(artUrl, 0, '50%');
   $('detail-art').style.background = artUrl ? '#111118' : '';
   renderTrackList('track-list', album.tracks, album.name, null);
+  switchView('library');
   $('library-root').classList.add('hidden');
   $('album-detail').classList.remove('hidden');
-  switchView('library');
 }
 
 function renderTrackList(listId, tracks, albumName, playlistId) {
@@ -707,8 +707,8 @@ function openNewPlaylistModal() {
 }
 
 function openAddToPlaylistModal(tracks) {
-  openModal('Add to Playlist', `
-    <div id="pl-modal-list">
+  let bodyHtml = `
+    <div id="pl-modal-list" style="max-height: 220px; overflow-y: auto; margin-bottom: 16px;">
       ${state.playlists.map(pl => {
         const inPl = tracks.every(t => pl.tracks.some(pt => pt.path === t.path));
         return `<div class="modal-pl-item${inPl ? ' in-playlist' : ''}" data-pl="${pl.id}">
@@ -716,10 +716,20 @@ function openAddToPlaylistModal(tracks) {
           <span class="add-check">✓</span>
         </div>`;
       }).join('')}
-      ${!state.playlists.length ? '<p style="color:var(--text-muted);font-size:.88rem">No playlists yet. Create one first.</p>' : ''}
+      ${!state.playlists.length ? '<p style="color:var(--text-muted);font-size:.88rem;margin-bottom:12px;">No playlists yet.</p>' : ''}
     </div>
-  `, []);
+    <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px;">
+      <p style="font-size:0.8rem;color:var(--text-muted);margin:0;">Create a new playlist and add this song:</p>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="quick-pl-name" placeholder="New playlist name…" style="flex:1;margin:0;padding:8px 12px;background:var(--bg-active);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.88rem;" />
+        <button class="btn-gold" id="btn-quick-create-pl" style="padding:8px 16px;font-size:0.85rem;border-radius:var(--radius);white-space:nowrap;">Create & Add</button>
+      </div>
+    </div>
+  `;
 
+  openModal('Add to Playlist', bodyHtml, []);
+
+  // Handle clicking on existing playlists
   $$('#pl-modal-list .modal-pl-item').forEach(item => {
     item.addEventListener('click', () => {
       const pl = state.playlists.find(p => p.id === item.dataset.pl);
@@ -736,6 +746,39 @@ function openAddToPlaylistModal(tracks) {
       closeModal();
     });
   });
+
+  // Handle quick playlist creation
+  const quickInput = $('quick-pl-name');
+  const quickBtn = $('btn-quick-create-pl');
+
+  const createAndAdd = () => {
+    const name = quickInput.value.trim() || 'My Playlist';
+    const plId = `pl_${Date.now()}`;
+    const newPl = { id: plId, name, tracks: [] };
+    
+    // Add selected tracks to the new playlist
+    tracks.forEach(t => {
+      newPl.tracks.push(t);
+      downloadForOffline(t);
+    });
+
+    state.playlists.push(newPl);
+    persist();
+    renderSidebarPlaylists();
+    renderMobilePlaylists();
+    showToast(`Created "${name}" and added track${tracks.length !== 1 ? 's' : ''}`);
+    closeModal();
+  };
+
+  if (quickBtn && quickInput) {
+    quickBtn.addEventListener('click', createAndAdd);
+    quickInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        createAndAdd();
+      }
+    });
+  }
 }
 
 // ── Modal ─────────────────────────────────────────────────────
@@ -743,8 +786,8 @@ function openModal(title, bodyHtml, buttons) {
   $('modal-title').textContent = title;
   $('modal-body').innerHTML = bodyHtml;
   const actions = $('modal-overlay').querySelector('.modal-actions');
-  // Remove any extra buttons
-  $$('#modal .btn-gold, #modal .btn-action').forEach(b => b.remove());
+  // Remove any extra buttons inside actions
+  $$('#modal .modal-actions .btn-gold, #modal .modal-actions .btn-action').forEach(b => b.remove());
   buttons.forEach(btn => {
     const el = document.createElement('button');
     el.className = btn.cls || 'btn-secondary';
@@ -799,12 +842,21 @@ function handleSearch() {
           <p class="track-title">${escHtml(track.title)}</p>
           <p class="player-album">${escHtml(track.albumName)}</p>
         </div>
-        <span class="track-format">${track.format || 'MP3'}</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="track-format">${track.format || 'MP3'}</span>
+          <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;" title="Add to Playlist">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
       `;
       li.addEventListener('click', () => {
         state.queue = matchedTracks;
         state.queueIndex = i;
         playCurrentQueueItem();
+      });
+      li.querySelector('.track-add-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        openAddToPlaylistModal([{...track, albumName: track.albumName}]);
       });
       li.addEventListener('contextmenu', e => {
         e.preventDefault();
