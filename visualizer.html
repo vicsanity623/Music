@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>Visualizer — SoundVault</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --gold: #c8a96e;
+    --bg: #0a0a0f;
+    --text: #f0ede8;
+    --muted: rgba(240,237,232,0.4);
+    --border: rgba(255,255,255,0.08);
+  }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: 'DM Sans', sans-serif; }
+
+  #glCanvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #freqCanvas {
+    position: fixed; bottom: 0; left: 0; width: 100%; height: 120px;
+    z-index: 4; pointer-events: none; opacity: 0.75;
+  }
+
+  #topBar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: max(20px, env(safe-area-inset-top)) 24px 18px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, transparent 100%);
+  }
+
+  #backBtn {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(10,10,15,0.55);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    color: var(--text);
+    padding: 10px 18px; border-radius: 999px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    letter-spacing: 0.05em; cursor: pointer; text-decoration: none;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  #backBtn:hover { background: rgba(200,169,110,0.15); border-color: rgba(200,169,110,0.4); color: var(--gold); }
+  #backBtn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+  #vizLabel {
+    font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); opacity: 0.75;
+  }
+
+  #nowPlaying {
+    position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%);
+    z-index: 10; pointer-events: all; cursor: pointer; text-align: center;
+    padding: 14px 32px;
+    background: rgba(10,10,15,0.5);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-radius: 999px; white-space: nowrap;
+    transition: opacity 0.6s ease;
+  }
+  #nowPlaying.hide { opacity: 0; pointer-events: none; }
+  #npTitle { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: 0.03em; margin-bottom: 3px; }
+  #npAlbum { font-size: 11px; color: var(--muted); letter-spacing: 0.09em; text-transform: uppercase; }
+
+  #noAudio {
+    position: fixed; inset: 0; z-index: 20; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; text-align: center; color: var(--muted); pointer-events: none;
+  }
+  #noAudio svg { width: 48px; height: 48px; opacity: 0.3; }
+  #noAudio p { font-size: 14px; letter-spacing: 0.06em; }
+  #noAudio small { font-size: 11px; opacity: 0.5; }
+</style>
+
+<!-- ═══════════════════════════════════════════════
+     VERTEX SHADER  —  fullscreen quad passthrough
+════════════════════════════════════════════════ -->
+<script id="vs" type="x-shader/x-vertex">
+attribute vec2 a_pos;
+void main(){gl_Position=vec4(a_pos,0.,1.);}
+</script>
+
+<!-- ═══════════════════════════════════════════════
+     FRAGMENT SHADER  —  Domain-warped FBM smoke
+     Audio uniforms:
+       u_bass  0-1 → warp intensity, amber glow
+       u_mid   0-1 → smoke speed, teal shimmer
+       u_high  0-1 → turbulence detail, star sparks
+════════════════════════════════════════════════ -->
+<script id="fs" type="x-shader/x-fragment">
+precision highp float;
+
+uniform vec2  u_res;
+uniform float u_time;
+uniform float u_bass;
+uniform float u_mid;
+uniform float u_high;
+
+/* ── Simplex 2D (ashima / Ian McEwan) ─────────────── */
+vec3 mod289v3(vec3 x){return x-floor(x*(1./289.))*289.;}
+vec2 mod289v2(vec2 x){return x-floor(x*(1./289.))*289.;}
+vec3 permute3(vec3 x){return mod289v3(((x*34.)+1.)*x);}
+
+float snoise(vec2 v){
+  const vec4 C=vec4(.211324865405187,.366025403784439,-.577350269189626,.024390243902439);
+  vec2 i=floor(v+dot(v,C.yy));
+  vec2 x0=v-i+dot(i,C.xx);
+  vec2 i1=(x0.x>x0.y)?vec2(1.,0.):vec2(0.,1.);
+  vec4 x12=x0.xyxy+C.xxzz; x12.xy-=i1;
+  i=mod289v2(i);
+  vec3 p=permute3(permute3(i.y+vec3(0.,i1.y,1.))+i.x+vec3(0.,i1.x,1.));
+  vec3 m=max(.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.);
+  m=m*m; m=m*m;
+  vec3 x2=2.*fract(p*.024390243902439)-1.;
+  vec3 h=abs(x2)-.5;
+  vec3 ox=floor(x2+.5);
+  vec3 a0=x2-ox;
+  m*=1.79284291400159-.85373472095314*(a0*a0+h*h);
+  vec3 g; g.x=a0.x*x0.x+h.x*x0.y; g.yz=a0.yz*x12.xz+h.yz*x12.yw;
+  return 130.*dot(m,g);
+}
+
+/* ── Fractional Brownian Motion ───────────────────── */
+float fbm(vec2 p, int octs){
+  float v=0., amp=.5;
+  mat2 rot=mat2(1.6,1.2,-1.2,1.6);
+  for(int i=0;i<8;i++){
+    if(i>=octs) break;
+    v+=amp*snoise(p);
+    p=rot*p;
+    amp*=.5;
+  }
+  return v;
+}
+
+/* ── Double-warp smoke ────────────────────────────── */
+float smoke(vec2 uv, float spd, float warp){
+  vec2 q=vec2(fbm(uv,5), fbm(uv+vec2(5.2,1.3),5));
+  vec2 r=vec2(fbm(uv+warp*q+vec2(1.7,9.2)+vec2(spd,0.),5),
+               fbm(uv+warp*q+vec2(8.3,2.8)+vec2(spd,0.),5));
+  return fbm(uv+warp*r, 6);
+}
+
+/* ── Cosine palette (Inigo Quilez) ───────────────── */
+vec3 palette(float t, float bass, float mid, float high){
+  vec3 d=vec3(fract(.00+bass*.42), fract(.33+mid*.30), fract(.67+high*.24));
+  return .5+.5*cos(6.2831853*(vec3(1.)*t+d));
+}
+
+void main(){
+  vec2 uv=(gl_FragCoord.xy-.5*u_res)/min(u_res.x,u_res.y);
+
+  /* smoke rises slowly */
+  uv.y-=u_time*(.018+u_mid*.014);
+
+  float warp=1.9+u_bass*2.8+u_mid*.7;
+  float spd=u_time*(.05+u_mid*.08);
+
+  float f=smoke(uv*1.65, spd, warp);
+  float f2=smoke(uv*2.2+vec2(3.1,1.8), spd*1.35+.9, warp*.55);
+  f=mix(f, f2, .20+u_high*.42);
+
+  f=f*.5+.5; /* remap to [0,1] */
+
+  vec3 col=palette(f+u_time*.022, u_bass, u_mid, u_high);
+
+  /* density mask */
+  float density=smoothstep(.10,.84,f);
+  col*=density;
+
+  /* bass — warm amber glow at bottom-centre */
+  vec2 g1=uv-vec2(0.,-.34);
+  col+=vec3(.99,.63,.17)*exp(-dot(g1,g1)*2.6)*u_bass*.95;
+
+  /* mid — cool teal shimmer at top-centre */
+  vec2 g2=uv-vec2(0.,.30);
+  col+=vec3(.28,.84,.78)*exp(-dot(g2,g2)*3.8)*u_mid*.55;
+
+  /* high — violet sparks top-right */
+  vec2 g3=uv-vec2(.35,.25);
+  col+=vec3(.65,.25,.95)*exp(-dot(g3,g3)*5.)*u_high*.45;
+
+  /* vignette */
+  col*=1.-smoothstep(.42,1.28,length(uv*vec2(.72,1.)));
+
+  /* star-dust particles on high freqs */
+  float stars=step(.9945, fract(sin(dot(floor(uv*380.),vec2(127.1,311.7)))*43758.5));
+  col+=stars*u_high*.7*vec3(.88,.82,1.);
+
+  gl_FragColor=vec4(col,1.);
+}
+</script>
+</head>
+<body>
+
+<canvas id="glCanvas"></canvas>
+<canvas id="freqCanvas"></canvas>
+
+<div id="topBar">
+  <button id="backBtn" onclick="history.back()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+    Back
+  </button>
+  <span id="vizLabel">◈ Visualizer</span>
+  <div style="width:80px"></div>
+</div>
+
+<div id="nowPlaying">
+  <div id="npTitle">—</div>
+  <div id="npAlbum">SoundVault</div>
+</div>
+
+<div id="noAudio">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+    <path d="M9 18V5l12-2v13"/>
+    <circle cx="6" cy="18" r="3"/>
+    <circle cx="18" cy="16" r="3"/>
+  </svg>
+  <p>No audio playing</p>
+  <small>Play a track in SoundVault, then open the visualizer</small>
+</div>
+
+<script>
+'use strict';
+
+/* ── WebGL init ─────────────────────────────────────────────── */
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+if (!gl) { document.body.innerHTML = '<p style="color:#c8a96e;font-family:sans-serif;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%)">WebGL not supported.</p>'; throw 0; }
+
+function mkShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src.trim());
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, mkShader(gl.VERTEX_SHADER,   document.getElementById('vs').textContent));
+gl.attachShader(prog, mkShader(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const uRes  = gl.getUniformLocation(prog, 'u_res');
+const uTime = gl.getUniformLocation(prog, 'u_time');
+const uBass = gl.getUniformLocation(prog, 'u_bass');
+const uMid  = gl.getUniformLocation(prog, 'u_mid');
+const uHigh = gl.getUniformLocation(prog, 'u_high');
+
+/* ── Canvas / resize ────────────────────────────────────────── */
+const fCanvas = document.getElementById('freqCanvas');
+const fCtx    = fCanvas.getContext('2d');
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width  = innerWidth  * dpr;  canvas.height = innerHeight * dpr;
+  canvas.style.width  = innerWidth  + 'px';
+  canvas.style.height = innerHeight + 'px';
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  fCanvas.width  = innerWidth  * dpr;
+  fCanvas.height = 120 * dpr;
+  fCanvas.style.width  = innerWidth + 'px';
+  fCanvas.style.height = '120px';
+}
+resize();
+addEventListener('resize', resize);
+
+/* ── Audio ──────────────────────────────────────────────────── */
+let analyser, dataArray, bufLen;
+let sB = 0, sM = 0, sH = 0;   /* smoothed bass / mid / high */
+let hasAudio = false;
+const noAudioEl = document.getElementById('noAudio');
+
+function initAudio(el) {
+  try {
+    const ctx = new (AudioContext || webkitAudioContext)();
+    const src = ctx.createMediaElementSource(el);
+    analyser  = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.80;
+    src.connect(analyser);
+    analyser.connect(ctx.destination);
+    bufLen    = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufLen);
+    hasAudio  = true;
+    noAudioEl.style.display = 'none';
+  } catch(e) {
+    console.warn('[Viz] audio connect failed:', e);
+    noAudioEl.style.display = 'flex';
+  }
+}
+
+function readBands() {
+  if (!hasAudio) return;
+  analyser.getByteFrequencyData(dataArray);
+  const be = Math.floor(bufLen * 0.05);   /* bass  → ~0-200 Hz  */
+  const me = Math.floor(bufLen * 0.30);   /* mid   → ~200-2 kHz */
+  let bs=0, ms=0, hs=0;
+  for (let i=0;  i<be;    i++) bs += dataArray[i];
+  for (let i=be; i<me;    i++) ms += dataArray[i];
+  for (let i=me; i<bufLen;i++) hs += dataArray[i];
+  const bass = (bs/be)           /255;
+  const mid  = (ms/(me-be))      /255;
+  const high = (hs/(bufLen-me))  /255;
+  const k = 0.13;
+  sB += k*(bass-sB);  sM += k*(mid-sM);  sH += k*(high-sH);
+}
+
+/* ── Frequency bar strip ────────────────────────────────────── */
+function drawBars() {
+  const W = fCanvas.width, H = fCanvas.height;
+  fCtx.clearRect(0, 0, W, H);
+  if (!hasAudio) return;
+
+  const bars = 160;
+  const bw   = W / bars;
+
+  for (let i = 0; i < bars; i++) {
+    const t   = i / bars;
+    const bin = Math.floor(Math.pow(t, 1.75) * bufLen * 0.65);
+    const val = dataArray[Math.min(bin, bufLen-1)] / 255;
+    const bh  = val * H * 0.92;
+
+    /* colour sweep: amber → teal → violet */
+    let r, g, b;
+    if (t < 0.5) {
+      const f = t * 2;
+      r = Math.round(200 - f*120);  g = Math.round(100 + f*110);  b = Math.round(80  + f*130);
+    } else {
+      const f = (t-0.5)*2;
+      r = Math.round(80  + f*100);  g = Math.round(210 - f*100);  b = Math.round(210 + f*45);
+    }
+    const alpha = 0.5 + val * 0.5;
+
+    /* mirrored bars (symmetrical about centre) */
+    const x = i * bw;
+    const grad = fCtx.createLinearGradient(0, H, 0, H - bh);
+    grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    fCtx.fillStyle = grad;
+    fCtx.fillRect(x + 1, H - bh, bw - 2, bh);
+  }
+}
+
+/* ── Connect to main.js audio ───────────────────────────────── */
+function connect() {
+  /* Strategy 1: grab audio element from opener (window.open path) */
+  let el = null;
+  try {
+    if (window.opener && !window.opener.closed) {
+      el = window.opener.document.getElementById('audio-engine');
+      /* also pull track info from opener DOM */
+      const t = window.opener.document.getElementById('player-title')?.textContent;
+      const a = window.opener.document.getElementById('player-album')?.textContent;
+      if (t && t !== '—') document.getElementById('npTitle').textContent = t;
+      if (a && a !== '—') document.getElementById('npAlbum').textContent = a;
+    }
+  } catch(e) {}
+
+  if (el) { initAudio(el); return; }
+
+  /* Strategy 2: sessionStorage fallback (same-tab navigation) */
+  const src   = sessionStorage.getItem('sv_viz_src');
+  const title = sessionStorage.getItem('sv_viz_title');
+  const album = sessionStorage.getItem('sv_viz_album');
+  if (title) document.getElementById('npTitle').textContent = title;
+  if (album) document.getElementById('npAlbum').textContent = album;
+
+  if (src) {
+    const a = new Audio();
+    a.crossOrigin = 'anonymous';
+    a.src = src;
+    a.volume = 1;
+    a.play().catch(()=>{});
+    initAudio(a);
+  } else {
+    noAudioEl.style.display = 'flex';
+  }
+}
+
+setTimeout(connect, 100);
+
+/* ── Render loop ────────────────────────────────────────────── */
+let t0 = null;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!t0) t0 = ts;
+  const t = (ts - t0) / 1000;
+  readBands();
+  drawBars();
+  gl.uniform2f(uRes,  canvas.width, canvas.height);
+  gl.uniform1f(uTime, t);
+  gl.uniform1f(uBass, sB);
+  gl.uniform1f(uMid,  sM);
+  gl.uniform1f(uHigh, sH);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+requestAnimationFrame(frame);
+
+/* ── Auto-hide now-playing after 5 s ──────────────────────── */
+const npEl = document.getElementById('nowPlaying');
+setTimeout(() => npEl.classList.add('hide'), 5000);
+npEl.addEventListener('click', () => npEl.classList.toggle('hide'));
+</script>
+</body>
+</html>
