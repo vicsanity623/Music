@@ -937,10 +937,10 @@ h2.section-title {
 /* ── Player bar ────────────────────────────────────────────── */
 #player-bar {
   grid-area: player;
-  display: flex; /* Changed from grid */
-  justify-content: space-between; /* Pushes items to the edges */
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   padding: 0 20px env(safe-area-inset-bottom);
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
@@ -948,7 +948,6 @@ h2.section-title {
   -webkit-backdrop-filter: blur(20px);
   z-index: 100;
   transition: all var(--t);
-  min-height: var(--player-h); /* Allows it to grow when zoomed */
 }
 
 #player-bar.hidden {
@@ -1008,7 +1007,6 @@ h2.section-title {
   align-items: center;
   gap: 14px;
   min-width: 0;
-  flex: 1;
 }
 
 .player-art {
@@ -1082,8 +1080,6 @@ h2.section-title {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  flex: 1.5; /* Gives the middle controls slightly more priority */
-  min-width: 0; /* Prevents it from forcing a squash */
 }
 
 .player-top-controls {
@@ -1198,8 +1194,6 @@ h2.section-title {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  flex: 1; /* Lets it take up 1 part of the space */
-  min-width: 0;
 }
 
 .stems-btn {
@@ -1653,6 +1647,9 @@ h2.section-title {
     display: none;
   }
 
+  #player-bar {
+    grid-template-columns: 1fr auto 1fr;
+  }
 }
 
 /* ── Responsive: mobile ────────────────────────────────────── */
@@ -1709,9 +1706,9 @@ h2.section-title {
   }
 
   #player-bar {
+    grid-template-columns: 1fr auto;
     padding: 0 12px;
-    min-height: var(--player-h-mob); /* Changed to min-height */
-    height: auto;
+    height: var(--player-h-mob);
   }
 
   #player-bar:not(.fullscreen) .player-controls {
