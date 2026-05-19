@@ -643,6 +643,49 @@ def search_duckduckgo_google(title, artist=""):
         print(f"      DDG    : Error: {e}")
     return None
 
+def fetch_artist_image(artist_name):
+    """
+    Search Wikipedia for the artist page and get the main thumbnail image (headshot).
+    """
+    if not artist_name or artist_name.lower() in ("unknown artist", "various artists"):
+        return None
+        
+    url = "https://en.wikipedia.org/w/api.php"
+    search_params = {
+        "action": "query",
+        "list": "search",
+        "srsearch": f"{artist_name} musician OR band",
+        "format": "json",
+        "limit": 1
+    }
+    try:
+        r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
+        if r.status_code != 200:
+            return None
+            
+        data = r.json()
+        results = data.get("query", {}).get("search", [])
+        if not results:
+            return None
+        page_title = results[0]["title"]
+        
+        img_params = {
+            "action": "query",
+            "prop": "pageimages",
+            "titles": page_title,
+            "pithumbsize": 800,
+            "format": "json"
+        }
+        r_img = requests.get(url, params=img_params, headers={"User-Agent": UA}, timeout=10)
+        img_data = r_img.json()
+        pages = img_data.get("query", {}).get("pages", {})
+        for page_id, page_info in pages.items():
+            if "thumbnail" in page_info:
+                return page_info["thumbnail"]["source"]
+    except Exception as e:
+        print(f"      Artist : Error fetching image: {e}")
+    return None
+
 def find_official_match(title, artist="", album_hint=""):
     """
     Orchestrates the sequential search pipeline (MusicBrainz -> Wikipedia -> DDG).
@@ -791,6 +834,26 @@ def process_album(album_dir, dry_run=False):
             
             if art_data:
                 embed_art(f, art_data)
+                
+            # Fetch Artist Image
+            artist_dir = ALBUMS_DIR / safe_name(final_artist)
+            artist_dir.mkdir(parents=True, exist_ok=True)
+            artist_img_path = artist_dir / "artist.jpg"
+            if not artist_img_path.exists():
+                print(f"      Artist : fetching headshot…", end=" ", flush=True)
+                img_url = fetch_artist_image(final_artist)
+                if img_url:
+                    try:
+                        r_img = requests.get(img_url, headers={"User-Agent": UA}, timeout=15)
+                        if r_img.status_code == 200:
+                            artist_img_path.write_bytes(r_img.content)
+                            print(f"✓")
+                        else:
+                            print("✗")
+                    except Exception:
+                        print("✗")
+                else:
+                    print("✗")
             
             # Relocate Stems (if any exist from prior stems creation)
             stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
@@ -905,16 +968,19 @@ def build_index(unused_albums_list=None):
             artist_name = ""
             display_name = album_name
             stems_root_dir = STEMS_DIR / (album_dir.name + "STEMS")
+            artist_img_path = album_dir / "artist.jpg"
         elif album_dir.parent.parent == ALBUMS_DIR:
             album_name = album_dir.name
             artist_name = album_dir.parent.name
             display_name = f"{artist_name} - {album_name}"
             stems_root_dir = STEMS_DIR / artist_name / (album_name + "STEMS")
+            artist_img_path = album_dir.parent / "artist.jpg"
         else:
             album_name = album_dir.name
             artist_name = album_dir.parent.name
             display_name = f"{artist_name} - {album_name}"
             stems_root_dir = STEMS_DIR / artist_name / (album_name + "STEMS")
+            artist_img_path = album_dir.parent / "artist.jpg"
             
         for f in sorted(album_dir.iterdir()):
             if f.suffix.lower() not in AUDIO_EXTS: continue
@@ -943,6 +1009,7 @@ def build_index(unused_albums_list=None):
                 "name": display_name,
                 "path": str(album_dir.relative_to(MUSIC_ROOT)),
                 "art": str(cover_path.relative_to(MUSIC_ROOT)) if cover_path.exists() else "",
+                "artist_art": str(artist_img_path.relative_to(MUSIC_ROOT)) if artist_img_path.exists() else "",
                 "tracks": tracks
             })
 
