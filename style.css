@@ -1,6 +1,6 @@
 /* ============================================================
    SoundVault — Stylesheet
-   Aesthetic: Dark luxury / editorial — deep blacks, warm golds,
+   Aesthetic: Dark luxury / editorial — deep blacks, warm reds,
    generous space, cinematic typography
    ============================================================ */
 
@@ -29,9 +29,9 @@
   --text-muted: #4a4859;
 
   /* Accent */
-  --gold: #c8a96e;
-  --gold-dim: #7a6540;
-  --gold-glow: rgba(200, 169, 110, 0.18);
+  --red: #850f1c;
+  --red-dim: #3d0f15;
+  --red-glow: rgba(213, 0, 0, 1);
   --teal: #4ecdc4;
   --teal-dim: rgba(78, 205, 196, 0.15);
 
@@ -112,7 +112,7 @@ body {
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--gold);
+  color: var(--red);
   border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
 }
@@ -120,7 +120,7 @@ body {
 .sidebar-logo svg {
   width: 28px;
   height: 28px;
-  color: var(--gold);
+  color: var(--red);
 }
 
 .sidebar-nav {
@@ -158,7 +158,7 @@ body {
 
 .nav-btn.active {
   background: var(--bg-active);
-  color: var(--gold);
+  color: var(--red);
 }
 
 .sidebar-section {
@@ -222,7 +222,7 @@ body {
 }
 
 #sidebar-playlists li.active {
-  color: var(--gold);
+  color: var(--red);
 }
 
 /* ── Main content ──────────────────────────────────────────── */
@@ -552,7 +552,7 @@ h2.section-title {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--gold);
+  background: var(--red);
   border: none;
   cursor: pointer;
   display: flex;
@@ -643,8 +643,8 @@ h2.section-title {
 }
 
 #search-input:focus {
-  border-color: var(--gold-dim);
-  box-shadow: 0 0 0 3px var(--gold-glow);
+  border-color: var(--red-dim);
+  box-shadow: 0 0 0 3px var(--red-glow);
 }
 
 #search-input::placeholder {
@@ -753,7 +753,7 @@ h2.section-title {
   align-items: center;
   gap: 8px;
   padding: 12px 28px;
-  background: var(--gold);
+  background: var(--red);
   color: #fa243c;
   border: none;
   border-radius: var(--radius-pill);
@@ -845,7 +845,7 @@ h2.section-title {
 
 .track-list li.active {
   background: var(--bg-active);
-  color: var(--gold);
+  color: var(--red);
 }
 
 .track-num {
@@ -856,7 +856,7 @@ h2.section-title {
 }
 
 .track-list li.active .track-num {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .playing-indicator {
@@ -869,7 +869,7 @@ h2.section-title {
 .playing-indicator span {
   display: inline-block;
   width: 3px;
-  background: var(--gold);
+  background: var(--red);
   border-radius: 2px;
   animation: bar-bounce 0.8s ease infinite;
 }
@@ -915,7 +915,7 @@ h2.section-title {
 }
 
 .track-list li.active .track-title {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .track-duration {
@@ -1067,11 +1067,11 @@ h2.section-title {
 }
 
 .player-like.liked {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .player-like.liked svg {
-  fill: var(--gold);
+  fill: var(--red);
 }
 
 /* Controls */
@@ -1112,7 +1112,7 @@ h2.section-title {
 }
 
 .ctrl-btn.active {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .ctrl-play {
@@ -1131,7 +1131,7 @@ h2.section-title {
 }
 
 .ctrl-play:hover {
-  background: var(--gold);
+  background: var(--red);
   color: var(--bg-deep);
 }
 
@@ -1169,7 +1169,7 @@ h2.section-title {
 }
 
 .progress-track:hover .progress-bar {
-  background: var(--gold);
+  background: var(--red);
 }
 
 .progress-thumb {
@@ -1238,7 +1238,7 @@ h2.section-title {
 }
 
 #volume-slider:hover::-webkit-slider-thumb {
-  background: var(--gold);
+  background: var(--red);
 }
 
 /* ── Panels ────────────────────────────────────────────────── */
@@ -1332,7 +1332,7 @@ h2.section-title {
 }
 
 #queue-list li.current {
-  color: var(--gold);
+  color: var(--red);
 }
 
 #queue-list .q-num {
@@ -1407,7 +1407,7 @@ h2.section-title {
 }
 
 #modal-body input:focus {
-  border-color: var(--gold-dim);
+  border-color: var(--red-dim);
 }
 
 .modal-pl-item {
@@ -1426,7 +1426,7 @@ h2.section-title {
 }
 
 .modal-pl-item .add-check {
-  color: var(--gold);
+  color: var(--red);
   display: none;
 }
 
@@ -1440,9 +1440,9 @@ h2.section-title {
   justify-content: flex-end;
 }
 
-.btn-gold {
+.btn-red {
   padding: 10px 22px;
-  background: var(--gold);
+  background: var(--red);
   color: #0a0a0f;
   border: none;
   border-radius: var(--radius-pill);
@@ -1453,7 +1453,7 @@ h2.section-title {
   transition: opacity var(--t);
 }
 
-.btn-gold:hover {
+.btn-red:hover {
   opacity: 0.85;
 }
 
@@ -1578,7 +1578,7 @@ h2.section-title {
   width: 36px;
   height: 36px;
   border: 3px solid var(--border);
-  border-top-color: var(--gold);
+  border-top-color: var(--red);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 16px;
@@ -1697,7 +1697,7 @@ h2.section-title {
   }
 
   .mnav-btn.active {
-    color: var(--gold);
+    color: var(--red);
   }
 
   #main-content {
