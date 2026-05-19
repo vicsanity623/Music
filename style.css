@@ -229,7 +229,7 @@ body {
 #main-content {
   grid-area: main;
   overflow-y: auto;
-  padding: calc(32px + env(safe-area-inset-top)) 40px calc(100px + env(safe-area-inset-bottom));
+  padding: calc(32px + env(safe-area-inset-top)) 24px calc(100px + env(safe-area-inset-bottom));
   position: relative;
 }
 
