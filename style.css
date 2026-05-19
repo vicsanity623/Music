@@ -68,7 +68,7 @@ body {
   background: var(--bg-deep);
   color: var(--text-primary);
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   grid-template-rows: 1fr var(--player-h);
   grid-template-areas:
     "sidebar main"
@@ -1593,7 +1593,7 @@ h2.section-title {
 /* ── Responsive: tablet ────────────────────────────────────── */
 @media (max-width: 900px) {
   body {
-    grid-template-columns: 64px 1fr;
+    grid-template-columns: 64px minmax(0, 1fr);
     grid-template-rows: 1fr var(--player-h);
   }
 
@@ -1679,21 +1679,18 @@ h2.section-title {
     display: flex;
     align-items: center;
     overflow: hidden;
-    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 5%, #000 95%, transparent 100%);
-    mask-image: linear-gradient(90deg, transparent 0, #000 5%, #000 95%, transparent 100%);
   }
 
   #player-bar:not(.fullscreen) .player-title {
     font-size: 0.95rem;
     font-weight: 600;
     white-space: nowrap;
-    padding-left: 100%;
-    animation: marquee-mobile 10s linear infinite;
-  }
-
-  @keyframes marquee-mobile {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-100%); }
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    display: block;
+    padding: 0;
+    animation: none;
   }
 
   #player-bar:not(.fullscreen) .player-album,
@@ -1749,7 +1746,7 @@ h2.section-title {
 /* ── Responsive: mobile ────────────────────────────────────── */
 @media (max-width: 600px) {
   body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 1fr auto auto;
     grid-template-areas:
       "main"
