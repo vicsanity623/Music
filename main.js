@@ -442,12 +442,11 @@ function playCurrentQueueItem() {
   if (state.queueIndex < 0 || state.queueIndex >= state.queue.length) return;
   const track = state.queue[state.queueIndex];
   state.currentTrack = track;
+  updateMediaSession(track);
   loadAndPlay(track);
   updatePlayerUI(track);
   updateTrackListHighlight();
   renderQueuePanel();
-  updateMediaSession(track);
-  // Auto-cache for offline playback
   downloadForOffline(track);
 }
 
@@ -1135,11 +1134,11 @@ function setupMediaSession() {
   navigator.mediaSession.setActionHandler('seekbackward', null);
   navigator.mediaSession.setActionHandler('seekforward', null);
 }
+
 function updateMediaSession(track) {
   if (!('mediaSession' in navigator)) return;
 
   const artUrl = getAlbumArt(track.albumName);
-  
   const artworkArray = artUrl ? [
     { src: artUrl, sizes: '512x512', type: 'image/jpeg' },
     { src: artUrl, sizes: '256x256', type: 'image/jpeg' }
@@ -1151,6 +1150,15 @@ function updateMediaSession(track) {
     album: track.albumName || '',
     artwork: artworkArray
   });
+  
+  navigator.mediaSession.setActionHandler('nexttrack', playNext);
+  navigator.mediaSession.setActionHandler('previoustrack', playPrev);
+
+  try {
+    navigator.mediaSession.setActionHandler('seekbackward', null);
+    navigator.mediaSession.setActionHandler('seekforward', null);
+  } catch(e) {}
+
   navigator.mediaSession.playbackState = 'playing';
 }
 
