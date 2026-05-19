@@ -981,7 +981,7 @@ h2.section-title {
   grid-template-columns: 1fr 2fr 1fr;
   align-items: center;
   gap: 8px;
-  padding: 0 20px env(safe-area-inset-bottom);
+  padding: 0 10px env(safe-area-inset-bottom);
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(20px);
@@ -1001,7 +1001,7 @@ h2.section-title {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: calc(40px + env(safe-area-inset-top)) 40px calc(40px + env(safe-area-inset-bottom));
+  padding: calc(20px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom));
   background: rgba(10, 10, 15, 0.95);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
