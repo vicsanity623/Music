@@ -82,7 +82,7 @@ chmod +x download_and_stem.sh serve.sh
 ./download_and_stem.sh
 
 # OR direct:
-./download_and_stem.sh --album "https://youtube.com/playlist?list=..." "Album Name"
+./download_and_stem.sh --album "https://youtube.com/playlist?list=..." "_Unsorted"
 
 # Single video:
 ./download_and_stem.sh --single "https://youtu.be/..." "Album Name"
