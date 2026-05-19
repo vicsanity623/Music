@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
-#  🎵  Music Downloader + Stem Splitter
+#  🎵  SoundVault Downloader
 #  Intel iMac compatible — macOS 12+
-#  Dependencies: yt-dlp, ffmpeg, python3, demucs
+#  Dependencies: yt-dlp, ffmpeg, python3
 # ============================================================
 
 set -euo pipefail
@@ -17,10 +17,13 @@ ALBUMS_DIR="$MUSIC_ROOT/Albums"
 STEMS_DIR="$MUSIC_ROOT/STEMS"
 AUDIO_FORMAT="${AUDIO_FORMAT:-mp3}"          # mp3 | flac
 AUDIO_QUALITY="${AUDIO_QUALITY:-320}"        # kbps for mp3
-DEMUCS_MODEL="htdemucs_ft"                   # high-quality 4-stem model
-STEMS_FMT="mp3"                              # format for stem output files
-STEMS_QUALITY=320                            # kbps for stems
 COOKIE_FILE=""                               # optional: path to cookies.txt
+
+# Detect local Python interpreter (prefer active virtualenv or local .venv2)
+PYTHON_BIN="python3"
+if [[ -x "$(dirname "$0")/.venv2/bin/python3" ]]; then
+  PYTHON_BIN="$(dirname "$0")/.venv2/bin/python3"
+fi
 
 log()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
 ok()     { echo -e "${GREEN}[OK]${NC}    $*"; }
@@ -42,25 +45,16 @@ check_deps() {
     fi
   done
 
-  # Check demucs python package
-  if python3 -c "import demucs" 2>/dev/null; then
-    ok "demucs python package found"
-  else
-    err "demucs python package NOT FOUND"
-    missing+=("demucs")
-  fi
+  # Log which Python interpreter we are using
+  log "Using Python interpreter: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     echo ""
     err "Missing dependencies. Install them with:"
     echo ""
     echo "  # Homebrew (recommended for Intel iMac)"
-    echo "  brew install yt-dlp ffmpeg"
-    echo "  pip3 install demucs"
+    echo "  brew install yt-dlp ffmpeg python3"
     echo ""
-    echo "  # Or with pipx (isolated environment)"
-    echo "  brew install pipx"
-    echo "  pipx install demucs"
     exit 1
   fi
   ok "All dependencies satisfied"
@@ -83,7 +77,6 @@ download_track() {
     --no-playlist
     --extract-audio
     --audio-quality "$AUDIO_QUALITY"
-    --embed-thumbnail
     --embed-metadata
     --add-metadata
     --parse-metadata "%(uploader)s:%(artist)s"
@@ -104,75 +97,6 @@ download_track() {
   yt-dlp "${yt_opts[@]}" "$url"
 }
 
-# ── Run htdemucs_ft on one audio file ────────────────────────
-stem_track() {
-  local audio_file="$1"   # full path to downloaded track
-  local stem_out_dir="$2" # where to write the 4 stems
-  local track_name="$3"   # display name
-
-  # Check if all 4 stems already exist to avoid redundant CPU/GPU processing
-  local stems_exist=true
-  for stem in vocals drums bass other; do
-    if [[ ! -f "$stem_out_dir/${stem}.${STEMS_FMT}" ]]; then
-      stems_exist=false
-      break
-    fi
-  done
-
-  if $stems_exist; then
-    ok "  Stems already exist for: $track_name (skipping stem step)"
-    return 0
-  fi
-
-  log "Stemming: $track_name"
-  log "  Model : $DEMUCS_MODEL"
-  log "  Output: $stem_out_dir"
-
-  mkdir -p "$stem_out_dir"
-
-  # demucs outputs to <out>/<model>/<track>/{vocals,drums,bass,other}.wav
-  local tmp_demucs="$stem_out_dir/_demucs_tmp"
-  mkdir -p "$tmp_demucs"
-
-  python3 -m demucs \
-    --name "$DEMUCS_MODEL" \
-    --out "$tmp_demucs" \
-    "$audio_file" 2>&1 | while IFS= read -r line; do echo "    $line"; done
-
-  # Find the wav outputs and convert to mp3/flac
-  local model_dir="$tmp_demucs/$DEMUCS_MODEL"
-  local track_basename
-  track_basename=$(basename "$audio_file")
-  track_basename="${track_basename%.*}"
-
-  # demucs slugifies the filename; find the matching dir
-  local demucs_track_dir
-  demucs_track_dir=$(find "$model_dir" -maxdepth 1 -type d | grep -v "^$model_dir$" | head -1)
-
-  if [[ -z "$demucs_track_dir" ]]; then
-    err "demucs produced no output for: $audio_file"
-    rm -rf "$tmp_demucs"
-    return 1
-  fi
-
-  for stem in vocals drums bass other; do
-    local wav_in="$demucs_track_dir/${stem}.wav"
-    if [[ -f "$wav_in" ]]; then
-      local out_file="$stem_out_dir/${stem}.${STEMS_FMT}"
-      if [[ "$STEMS_FMT" == "flac" ]]; then
-        ffmpeg -nostdin -y -i "$wav_in" -c:a flac "$out_file" -loglevel error
-      else
-        ffmpeg -nostdin -y -i "$wav_in" -c:a libmp3lame -b:a "${STEMS_QUALITY}k" "$out_file" -loglevel error
-      fi
-      ok "  Stem saved → $out_file"
-    else
-      warn "  Stem not found: $wav_in"
-    fi
-  done
-
-  rm -rf "$tmp_demucs"
-}
-
 # ── Process a full YouTube playlist / album URL ───────────────
 process_album() {
   local playlist_url="$1"
@@ -180,9 +104,8 @@ process_album() {
 
   album_name=$(sanitise "$album_name")
   local album_dir="$ALBUMS_DIR/$album_name"
-  local stems_album_dir="$STEMS_DIR/${album_name}STEMS"
 
-  mkdir -p "$album_dir" "$stems_album_dir"
+  mkdir -p "$album_dir"
 
   header "Album: $album_name"
   log "Fetching track list…"
@@ -207,13 +130,9 @@ process_album() {
     echo ""
     echo -e "${BOLD}▶  Track $track_num / $total${NC}"
 
-    # ── 1. Get title for display & stem folder naming ──────────
     local raw_title
     raw_title=$(yt-dlp --get-title --no-playlist "$track_url" 2>/dev/null || echo "Track_${track_num}")
-    local safe_title
-    safe_title=$(sanitise "$raw_title")
 
-    # ── 2. Download ────────────────────────────────────────────
     # Build padded track number for filename sorting
     local padded
     padded=$(printf "%02d" "$track_num")
@@ -222,9 +141,9 @@ process_album() {
       --no-playlist
       --extract-audio
       --audio-quality "$AUDIO_QUALITY"
-      --embed-thumbnail
       --embed-metadata
       --add-metadata
+      --parse-metadata "%(uploader)s:%(artist)s"
       --output "$album_dir/${padded} - %(title)s.%(ext)s"
       --restrict-filenames
       --no-mtime
@@ -239,25 +158,21 @@ process_album() {
     [[ -n "$COOKIE_FILE" ]] && yt_opts+=(--cookies "$COOKIE_FILE")
 
     if ! yt-dlp "${yt_opts[@]}" "$track_url"; then
-      warn "Download failed for track $track_num ($raw_title), skipping stem step"
+      warn "Download failed for track $track_num ($raw_title), skipping to next"
       ((track_num++))
       continue
     fi
 
-    # ── 3. Find the freshly downloaded file ───────────────────
+    # Locate the freshly downloaded file
     local downloaded_file
     downloaded_file=$(find "$album_dir" -maxdepth 1 -name "${padded} -*" \( -name "*.mp3" -o -name "*.flac" \) | sort | tail -1)
 
     if [[ -z "$downloaded_file" ]]; then
-      warn "Could not locate downloaded file for track $track_num, skipping stems"
+      warn "Could not locate downloaded file for track $track_num"
       ((track_num++))
       continue
     fi
     ok "Downloaded → $downloaded_file"
-
-    # ── 4. Stem split ─────────────────────────────────────────
-    local track_stem_dir="$stems_album_dir/$safe_title"
-    stem_track "$downloaded_file" "$track_stem_dir" "$raw_title"
 
     ok "Track $track_num complete ✓"
     ((track_num++))
@@ -265,7 +180,10 @@ process_album() {
 
   header "Album complete: $album_name"
   echo -e "  Audio  → ${CYAN}$album_dir${NC}"
-  echo -e "  Stems  → ${CYAN}$stems_album_dir${NC}"
+  
+  # Run art_fetch.py to fetch official art and rename tracks!
+  log "Running SoundVault Art Fetcher & Organiser..."
+  $PYTHON_BIN "$(dirname "$0")/art_fetch.py" --album "$album_name"
 }
 
 # ── Download a single video (non-playlist) ────────────────────
@@ -275,8 +193,7 @@ process_single() {
 
   album_name=$(sanitise "$album_name")
   local album_dir="$ALBUMS_DIR/$album_name"
-  local stems_album_dir="$STEMS_DIR/${album_name}STEMS"
-  mkdir -p "$album_dir" "$stems_album_dir"
+  mkdir -p "$album_dir"
 
   header "Single track → album: $album_name"
 
@@ -284,9 +201,9 @@ process_single() {
     --no-playlist
     --extract-audio
     --audio-quality "$AUDIO_QUALITY"
-    --embed-thumbnail
     --embed-metadata
     --add-metadata
+    --parse-metadata "%(uploader)s:%(artist)s"
     --output "$album_dir/%(title)s.%(ext)s"
     --restrict-filenames
     --no-mtime
@@ -297,104 +214,23 @@ process_single() {
 
   yt-dlp "${yt_opts[@]}" "$url"
 
-  local downloaded_file
-  downloaded_file=$(find "$album_dir" -maxdepth 1 \( -name "*.mp3" -o -name "*.flac" \) | sort | tail -1)
-
-  if [[ -n "$downloaded_file" ]]; then
-    local raw_title
-    raw_title=$(basename "$downloaded_file")
-    raw_title="${raw_title%.*}"
-    local track_stem_dir="$stems_album_dir/$raw_title"
-    stem_track "$downloaded_file" "$track_stem_dir" "$raw_title"
-  fi
+  header "Single track download complete ✓"
+  echo -e "  Audio  → ${CYAN}$album_dir${NC}"
+  
+  # Run art_fetch.py to fetch official art and rename tracks!
+  log "Running SoundVault Art Fetcher & Organiser..."
+  $PYTHON_BIN "$(dirname "$0")/art_fetch.py" --album "$album_name"
 }
 
 # ── Build library index (JSON) for the web app ───────────────
 build_index() {
   header "Building library index"
-  local index_file="$MUSIC_ROOT/library.json"
-
-  python3 - "$ALBUMS_DIR" "$STEMS_DIR" "$index_file" <<'PYEOF'
-import json, os, sys, re
-from pathlib import Path
-
-albums_root = Path(sys.argv[1])
-stems_root  = Path(sys.argv[2])
-out_path    = Path(sys.argv[3])
-music_root  = out_path.parent
-
-library = {"albums": []}
-audio_exts = {".mp3", ".flac", ".m4a", ".ogg", ".wav"}
-
-audio_dirs = []
-for dirpath, dirnames, filenames in os.walk(str(albums_root)):
-    dirnames[:] = [d for d in dirnames if not d.startswith('.')]
-    path = Path(dirpath)
-    if any(f.suffix.lower() in audio_exts for f in path.iterdir() if f.is_file()):
-        audio_dirs.append(path)
-
-for album_dir in sorted(audio_dirs):
-    tracks = []
-    cover_path = album_dir / "cover.jpg"
-    
-    if album_dir.parent == albums_root:
-        # Flat layout: Albums/AlbumName/
-        album_name = album_dir.name
-        artist_name = ""
-        display_name = album_name
-        stems_root_dir = stems_root / (album_dir.name + "STEMS")
-    elif album_dir.parent.parent == albums_root:
-        # Nested layout: Albums/ArtistName/AlbumName/
-        album_name = album_dir.name
-        artist_name = album_dir.parent.name
-        display_name = f"{artist_name} - {album_name}"
-        stems_root_dir = stems_root / artist_name / (album_name + "STEMS")
-    else:
-        album_name = album_dir.name
-        artist_name = album_dir.parent.name
-        display_name = f"{artist_name} - {album_name}"
-        stems_root_dir = stems_root / artist_name / (album_name + "STEMS")
-
-    for f in sorted(album_dir.iterdir()):
-        if f.suffix.lower() not in audio_exts: continue
-        
-        # Link stems
-        stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
-        stems_dir = stems_root_dir / stem_key
-        stems = {}
-        if stems_dir.exists():
-            for sn in ("vocals", "drums", "bass", "other"):
-                for ext in (".mp3", ".flac", ".wav"):
-                    sp = stems_dir / (sn + ext)
-                    if sp.exists():
-                        stems[sn] = str(sp.relative_to(music_root))
-                        break
-
-        tracks.append({
-            "title": f.stem if album_dir.parent == albums_root else re.sub(r"^\d+\s*[-_.]\s*", "", f.stem),
-            "filename": f.name,
-            "path": str(f.relative_to(music_root)),
-            "format": f.suffix.lstrip(".").upper(),
-            "stems": stems
-        })
-        
-    if tracks:
-        library["albums"].append({
-            "name":   display_name,
-            "path":   str(album_dir.relative_to(music_root)),
-            "art":    str(cover_path.relative_to(music_root)) if cover_path.exists() else "",
-            "tracks": tracks
-        })
-
-out_path.write_text(json.dumps(library, indent=2, ensure_ascii=False))
-print(f"Index written → {out_path}  ({len(library['albums'])} albums)")
-PYEOF
-  ok "Index written → $index_file"
+  $PYTHON_BIN "$(dirname "$0")/art_fetch.py"
 }
 
 # ── Interactive menu ──────────────────────────────────────────
 interactive_menu() {
-  header "🎵  Music Downloader + Stem Splitter"
+  header "🎵  SoundVault Downloader"
   echo "  Music library root: ${CYAN}$MUSIC_ROOT${NC}"
   echo ""
   echo "  [1]  Download YouTube playlist / album"
@@ -411,14 +247,12 @@ interactive_menu() {
       read -rp "  Album name   : " aname
       [[ -z "$aname" ]] && { err "Album name required"; exit 1; }
       process_album "$purl" "$aname"
-      build_index
       ;;
     2)
       read -rp "  Video URL    : " vurl
       read -rp "  Album/folder : " aname
       [[ -z "$aname" ]] && { err "Album name required"; exit 1; }
       process_single "$vurl" "$aname"
-      build_index
       ;;
     3)
       build_index
@@ -452,14 +286,12 @@ main() {
     [[ -z "${2:-}" ]] && { err "Usage: $0 --album <url> <name>"; exit 1; }
     [[ -z "${3:-}" ]] && { err "Usage: $0 --album <url> <name>"; exit 1; }
     process_album "$2" "$3"
-    build_index
   elif [[ "$1" == "--single" ]]; then
     # Usage: ./download_and_stem.sh --single "https://..." "Album Name"
     check_deps
     [[ -z "${2:-}" ]] && { err "Usage: $0 --single <url> <album>"; exit 1; }
     [[ -z "${3:-}" ]] && { err "Usage: $0 --single <url> <album>"; exit 1; }
     process_single "$2" "$3"
-    build_index
   else
     echo "Usage:"
     echo "  $0                          # interactive menu"
