@@ -1855,7 +1855,12 @@ h2.section-title {
 
   @media (max-width: 600px) {
     #mobile-nav {
-      padding-bottom: max(env(safe-area-inset-bottom), 8px);
+      /* 
+        HOW TO ADJUST BOTTOM SPACING:
+        Currently this uses 'env(safe-area-inset-bottom)' which is Apple's default padding to clear the home swipe bar (about ~34px). 
+        To move the nav bar closer to the bottom edge, you can multiply it by a decimal like 0.5, or replace it entirely with a fixed pixel value (e.g. padding-bottom: 12px;).
+      */
+      padding-bottom: calc(env(safe-area-inset-bottom) * 0.6);
     }
   }
 }
