@@ -247,10 +247,13 @@ function renderDownloadedSongs() {
       }
     });
   });
+  const actions = $('downloaded-actions');
   if (!allTracks.length) {
     ul.innerHTML = `<p class="loading-msg" style="padding:40px 20px;">No downloaded songs yet.<br><small style="opacity:.6">Songs are saved when you play them.</small></p>`;
+    if (actions) actions.classList.add('hidden');
     return;
   }
+  if (actions) actions.classList.remove('hidden');
   renderSongsIntoList(ul, allTracks);
 }
 
@@ -259,12 +262,14 @@ function renderSongsIntoList(ul, tracks) {
     const li = document.createElement('li');
     li.className = 'songs-list-item';
     const artUrl = getAlbumArt(track.albumName);
+    const isDownloaded = state.downloaded.has(track.path);
+    const addBtnColor = isDownloaded ? 'var(--red)' : 'var(--text-muted)';
     li.innerHTML = `
       <div class="song-thumb" style="${artUrl ? 'background:#111118;' : 'background:var(--bg-active);'}">
         ${artUrl
-          ? `<img src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
-          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
-        }
+        ? `<img src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
+      }
       </div>
       <div class="song-info">
         <p class="track-title">${escHtml(track.title)}</p>
@@ -272,7 +277,7 @@ function renderSongsIntoList(ul, tracks) {
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="track-format">${track.format || 'MP3'}</span>
-        <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;" title="Add to Playlist">
+        <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
@@ -382,6 +387,8 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
 
     const isActive = state.currentTrack && state.currentTrack.path === track.path;
     li.className = isActive ? 'active' : '';
+    const isDownloaded = state.downloaded.has(track.path);
+    const addBtnColor = isDownloaded ? 'var(--red)' : 'var(--text-muted)';
     li.innerHTML = `
       <div class="track-num">
         <span class="track-num-wrap">${i + 1}</span>
@@ -395,7 +402,7 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
       </div>
       <div style="display:flex;align-items:center;gap:12px">
         <span class="track-format">${track.format || 'MP3'}</span>
-        <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;" title="Add to Playlist">
+        <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
@@ -643,6 +650,39 @@ function setupEventListeners() {
     state.library.albums.forEach(album => {
       album.tracks.forEach(t => allTracks.push({ ...t, albumName: album.name }));
     });
+    shuffleArray(allTracks);
+    state.queue = allTracks;
+    state.queueIndex = 0;
+    playCurrentQueueItem();
+  });
+
+  // Downloaded play / shuffle
+  $('btn-play-downloaded')?.addEventListener('click', () => {
+    if (!state.library?.albums) return;
+    const allTracks = [];
+    state.library.albums.forEach(album => {
+      album.tracks.forEach(t => {
+        if (state.downloaded.has(t.path)) {
+          allTracks.push({ ...t, albumName: album.name });
+        }
+      });
+    });
+    if (!allTracks.length) return;
+    state.queue = allTracks;
+    state.queueIndex = 0;
+    playCurrentQueueItem();
+  });
+  $('btn-shuffle-downloaded')?.addEventListener('click', () => {
+    if (!state.library?.albums) return;
+    const allTracks = [];
+    state.library.albums.forEach(album => {
+      album.tracks.forEach(t => {
+        if (state.downloaded.has(t.path)) {
+          allTracks.push({ ...t, albumName: album.name });
+        }
+      });
+    });
+    if (!allTracks.length) return;
     shuffleArray(allTracks);
     state.queue = allTracks;
     state.queueIndex = 0;
@@ -1150,14 +1190,14 @@ function updateMediaSession(track) {
     album: track.albumName || '',
     artwork: artworkArray
   });
-  
+
   navigator.mediaSession.setActionHandler('nexttrack', playNext);
   navigator.mediaSession.setActionHandler('previoustrack', playPrev);
 
   try {
     navigator.mediaSession.setActionHandler('seekbackward', null);
     navigator.mediaSession.setActionHandler('seekforward', null);
-  } catch(e) {}
+  } catch (e) { }
 
   navigator.mediaSession.playbackState = 'playing';
 }
