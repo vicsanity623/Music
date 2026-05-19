@@ -46,7 +46,7 @@ except ImportError:
     sys.exit("Missing: pip3 install mutagen")
 
 # ── Config ────────────────────────────────────────────────────────────────────
-MUSIC_ROOT = Path("/Volumes/XTRA/PYOB2026MAY/MusicLibrary")
+MUSIC_ROOT = Path(os.getenv("MUSIC_ROOT", "/Volumes/XTRA/PYOB2026MAY/MusicLibrary"))
 ALBUMS_DIR = MUSIC_ROOT / "Albums"
 STEMS_DIR  = MUSIC_ROOT / "STEMS"
 INDEX_FILE = MUSIC_ROOT / "library.json"
@@ -145,6 +145,11 @@ def mb_get(endpoint, params):
 
 def strip_album_prefix(title, album):
     if not album: return title
+    
+    # Do not strip if the title IS the album name
+    if normalize_compare(title) == normalize_compare(album):
+        return title
+        
     norm_album = "".join(c.lower() for c in album if c.isalnum())
     if not norm_album: return title
     
@@ -163,7 +168,13 @@ def strip_album_prefix(title, album):
             
         orig_start = indices[match_idx]
         orig_end = indices[match_idx + len(norm_album) - 1]
-        title = title[:orig_start] + title[orig_end + 1:]
+        
+        candidate = title[:orig_start] + title[orig_end + 1:]
+        # Ensure we don't completely erase the title
+        if not "".join(c for c in candidate if c.isalnum()):
+            break
+            
+        title = candidate
         
     return re.sub(r"\s+", " ", title).strip("-_.,/\\ )}] ({[ ")
 
@@ -606,7 +617,7 @@ def search_duckduckgo_google(title, artist=""):
             
         # Scan DDG response for wikipedia URLs
         wiki_titles = []
-        matches = re.finditer(r'en\.wikipedia\.org/wiki/([a-zA-Z0-9_\-\%\(\)]+)', r.text)
+        matches = re.finditer(r'en\.wikipedia\.org/wiki/([a-zA-Z0-9_\-\%\(\)\.,\']+)', r.text)
         for m in matches:
             encoded_title = m.group(1)
             page_title = urllib.parse.unquote(encoded_title).replace("_", " ")
@@ -651,13 +662,16 @@ def fetch_artist_image(artist_name):
         return None
         
     url = "https://en.wikipedia.org/w/api.php"
+    
+    # 1. Search for the artist with the word "music" to bias towards musical artists
     search_params = {
         "action": "query",
         "list": "search",
-        "srsearch": f"{artist_name} musician OR band",
+        "srsearch": f"{artist_name} music",
         "format": "json",
-        "limit": 1
+        "limit": 3
     }
+    
     try:
         r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
         if r.status_code != 200:
@@ -665,25 +679,64 @@ def fetch_artist_image(artist_name):
             
         data = r.json()
         results = data.get("query", {}).get("search", [])
+        
+        if not results:
+            # Fallback: try just the exact artist name
+            search_params["srsearch"] = artist_name
+            r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
+            results = r.json().get("query", {}).get("search", [])
+            
         if not results:
             return None
-        page_title = results[0]["title"]
+            
+        # 2. Pick the best title from the top 3 results
+        # We prefer a title that exactly matches the artist name (case-insensitive)
+        # or matches common disambiguation patterns.
+        best_title = results[0]["title"]
+        artist_lower = artist_name.lower()
         
+        for res in results:
+            title_lower = res["title"].lower()
+            if title_lower == artist_lower or \
+               title_lower == f"{artist_lower} (band)" or \
+               title_lower == f"{artist_lower} (musician)" or \
+               title_lower == f"{artist_lower} (rapper)" or \
+               title_lower == f"{artist_lower} (singer)":
+                best_title = res["title"]
+                break
+        
+        # 3. Fetch the image for the best title (adding redirects=1 to follow stage names)
         img_params = {
             "action": "query",
             "prop": "pageimages",
-            "titles": page_title,
+            "titles": best_title,
             "pithumbsize": 800,
+            "redirects": 1,
             "format": "json"
         }
+        
         r_img = requests.get(url, params=img_params, headers={"User-Agent": UA}, timeout=10)
         img_data = r_img.json()
         pages = img_data.get("query", {}).get("pages", {})
+        
         for page_id, page_info in pages.items():
             if "thumbnail" in page_info:
                 return page_info["thumbnail"]["source"]
+                
+        # 4. If the best title had no image, fallback to checking the other top results
+        for res in results:
+            if res["title"] == best_title:
+                continue
+            img_params["titles"] = res["title"]
+            r_img = requests.get(url, params=img_params, headers={"User-Agent": UA}, timeout=10)
+            pages = r_img.json().get("query", {}).get("pages", {})
+            for page_id, page_info in pages.items():
+                if "thumbnail" in page_info:
+                    return page_info["thumbnail"]["source"]
+
     except Exception as e:
         print(f"      Artist : Error fetching image: {e}")
+        
     return None
 
 def find_official_match(title, artist="", album_hint=""):
@@ -795,7 +848,36 @@ def process_album(album_dir, dry_run=False):
                 final_artist = album_dir.parent.name
 
         # Determine Destination Directory
-        dest_dir = ALBUMS_DIR / safe_name(final_artist) / safe_name(final_album)
+        artist_dir_name = safe_name(final_artist)
+        if ALBUMS_DIR.exists():
+            for d in ALBUMS_DIR.iterdir():
+                if d.is_dir() and not d.name.startswith('.') and normalize_compare(d.name) == normalize_compare(final_artist):
+                    artist_dir_name = d.name
+                    break
+        
+        artist_dir = ALBUMS_DIR / artist_dir_name
+        
+        album_dir_name = safe_name(final_album)
+        if artist_dir.exists():
+            norm_new = normalize_compare(final_album)
+            core_new = normalize_compare(re.sub(r"[\(\[\{]?\s*(?:expanded|deluxe|remastered|anniversary|special|edition|version|tour|bonus)\b.*[\)\]\}]?", "", final_album, flags=re.IGNORECASE))
+            
+            for d in artist_dir.iterdir():
+                if d.is_dir() and not d.name.startswith('.'):
+                    norm_existing = normalize_compare(d.name)
+                    core_existing = normalize_compare(re.sub(r"[\(\[\{]?\s*(?:expanded|deluxe|remastered|anniversary|special|edition|version|tour|bonus)\b.*[\)\]\}]?", "", d.name, flags=re.IGNORECASE))
+                    
+                    if norm_existing == norm_new:
+                        album_dir_name = d.name
+                        break
+                    elif core_existing and core_new and core_existing == core_new:
+                        album_dir_name = d.name
+                        break
+                    elif len(norm_existing) > 10 and len(norm_new) > 10 and (norm_existing in norm_new or norm_new in norm_existing):
+                        album_dir_name = d.name
+                        break
+        
+        dest_dir = artist_dir / album_dir_name
         
         prefix_m = re.match(r"^(\d+\s*[-_.]\s*)", f.stem)
         prefix = prefix_m.group(1) if prefix_m else ""
