@@ -166,7 +166,7 @@ function renderLibraryAlbums() {
 
 // ── Artists helpers ───────────────────────────────────────────
 function getArtistsMap() {
-  // Build a map: artistName -> [tracks...]
+  // Build a map: artistName -> { tracks: [...], artistArt: string }
   // Artist is derived from album name by stripping " - AlbumTitle" pattern,
   // or we use the full album name as artist if no separator found.
   const map = new Map();
@@ -175,30 +175,88 @@ function getArtistsMap() {
     // Try to extract artist from "Artist - Album" format
     const sepIdx = album.name.indexOf(' - ');
     const artist = sepIdx > -1 ? album.name.substring(0, sepIdx) : album.name;
-    if (!map.has(artist)) map.set(artist, []);
+    if (!map.has(artist)) map.set(artist, { tracks: [], artistArt: null });
+    
+    if (album.artist_art && !map.get(artist).artistArt) {
+      map.get(artist).artistArt = album.artist_art;
+    }
+
     album.tracks.forEach(t => {
-      map.get(artist).push({ ...t, albumName: album.name });
+      map.get(artist).tracks.push({ ...t, albumName: album.name });
     });
   });
   return map;
 }
 
-function renderArtistsList() {
+function renderArtistsList(filterText = '') {
   const ul = $('artists-list');
+  const scrollContainer = $('artists-az-scroll');
   if (!ul) return;
   ul.innerHTML = '';
+  if (scrollContainer) scrollContainer.innerHTML = '';
+
   const map = getArtistsMap();
-  const sorted = [...map.keys()].sort((a, b) => a.localeCompare(b));
+  let sorted = [...map.keys()].sort((a, b) => a.localeCompare(b));
+  
+  if (filterText) {
+    const lower = filterText.toLowerCase();
+    sorted = sorted.filter(a => a.toLowerCase().includes(lower));
+  }
+  
+  if (!sorted.length) {
+    ul.innerHTML = `<p class="loading-msg">No artists found.</p>`;
+    return;
+  }
+  
+  let currentLetter = '';
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('');
+  
+  // Set up A-Z scroll bar
+  if (!filterText && scrollContainer) {
+    alphabet.forEach(char => {
+      const el = document.createElement('div');
+      el.className = 'az-char';
+      el.textContent = char;
+      el.addEventListener('click', () => {
+        const target = document.getElementById(`artist-sep-${char === '#' ? 'num' : char}`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      scrollContainer.appendChild(el);
+    });
+  }
+
   sorted.forEach(artist => {
-    const tracks = map.get(artist);
+    const data = map.get(artist);
+    const tracks = data.tracks;
+    
+    // Check for letter separator
+    const firstChar = artist.charAt(0).toUpperCase();
+    const letter = /[A-Z]/.test(firstChar) ? firstChar : '#';
+    if (!filterText && letter !== currentLetter) {
+      currentLetter = letter;
+      const sep = document.createElement('div');
+      sep.className = 'artist-separator';
+      sep.id = `artist-sep-${currentLetter === '#' ? 'num' : currentLetter}`;
+      sep.textContent = currentLetter;
+      ul.appendChild(sep);
+    }
+
     const li = document.createElement('li');
     li.className = 'artist-list-item';
+    
+    let artHtml = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                     <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                     <circle cx="12" cy="7" r="4"/>
+                   </svg>`;
+    let avatarStyle = '';
+    if (data.artistArt) {
+      artHtml = `<img src="${BASE_URL}/${data.artistArt}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy" />`;
+      avatarStyle = 'background:transparent;border:none;';
+    }
+
     li.innerHTML = `
-      <div class="artist-list-avatar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
+      <div class="artist-list-avatar" style="${avatarStyle}">
+        ${artHtml}
       </div>
       <div class="artist-list-info">
         <span class="artist-list-name">${escHtml(artist)}</span>
@@ -206,15 +264,29 @@ function renderArtistsList() {
       </div>
       <svg class="lib-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
     `;
-    li.addEventListener('click', () => openArtistDetail(artist, tracks));
+    li.addEventListener('click', () => openArtistDetail(artist, tracks, data.artistArt));
     ul.appendChild(li);
   });
 }
 
-function openArtistDetail(artist, tracks) {
+function openArtistDetail(artist, tracks, artistArt) {
   state.artistView = artist;
   $('artist-detail-name').textContent = artist;
   $('artist-detail-count').textContent = `${tracks.length} song${tracks.length !== 1 ? 's' : ''}`;
+  
+  const avatarIcon = $('artist-avatar-icon');
+  if (avatarIcon) {
+    if (artistArt) {
+      avatarIcon.innerHTML = `<img src="${BASE_URL}/${artistArt}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+      avatarIcon.style.background = 'transparent';
+      avatarIcon.style.border = 'none';
+    } else {
+      avatarIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+      avatarIcon.style.background = 'var(--bg-active)';
+      avatarIcon.style.border = '2px solid var(--border-hi)';
+    }
+  }
+
   renderTrackList('artist-track-list', tracks, null, null);
   showLibrarySubView('artist-detail');
 }
@@ -613,9 +685,9 @@ function setupEventListeners() {
   $('btn-play-artist')?.addEventListener('click', () => {
     if (!state.artistView) return;
     const map = getArtistsMap();
-    const tracks = map.get(state.artistView) || [];
-    if (tracks.length) {
-      state.queue = [...tracks];
+    const data = map.get(state.artistView);
+    if (data && data.tracks.length) {
+      state.queue = [...data.tracks];
       state.queueIndex = 0;
       playCurrentQueueItem();
     }
@@ -623,9 +695,9 @@ function setupEventListeners() {
   $('btn-shuffle-artist')?.addEventListener('click', () => {
     if (!state.artistView) return;
     const map = getArtistsMap();
-    const tracks = map.get(state.artistView) || [];
-    if (tracks.length) {
-      state.queue = [...tracks];
+    const data = map.get(state.artistView);
+    if (data && data.tracks.length) {
+      state.queue = [...data.tracks];
       shuffleArray(state.queue);
       state.queueIndex = 0;
       playCurrentQueueItem();
@@ -852,6 +924,11 @@ function setupEventListeners() {
 
   // Search
   $('search-input').addEventListener('input', debounce(handleSearch, 150));
+  
+  // Artists Search
+  $('artists-search-input')?.addEventListener('input', e => {
+    renderArtistsList(e.target.value.trim());
+  });
 }
 
 // ── View switching ────────────────────────────────────────────
