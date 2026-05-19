@@ -229,7 +229,7 @@ body {
 #main-content {
   grid-area: main;
   overflow-y: auto;
-  padding: calc(32px + env(safe-area-inset-top)) 24px calc(80px + env(safe-area-inset-bottom));
+  padding: calc(24px + env(safe-area-inset-top)) 10px calc(75px + env(safe-area-inset-bottom));
   position: relative;
 }
 
@@ -1832,7 +1832,7 @@ h2.section-title {
   }
 
   #main-content {
-    padding: calc(20px + env(safe-area-inset-top)) 16px 0;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 0;
     overflow-y: auto;
   }
 
@@ -1900,7 +1900,7 @@ h2.section-title {
         Currently this uses 'env(safe-area-inset-bottom)' which is Apple's default padding to clear the home swipe bar (about ~34px). 
         To move the nav bar closer to the bottom edge, you can multiply it by a decimal like 0.5, or replace it entirely with a fixed pixel value (e.g. padding-bottom: 12px;).
       */
-      padding-bottom: calc(env(safe-area-inset-bottom) * 0.04);
+      padding-bottom: calc(env(safe-area-inset-bottom) * 0.01);
     }
   }
 }
