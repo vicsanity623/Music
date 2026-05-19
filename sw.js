@@ -4,7 +4,7 @@
 
 const CACHE_NAME = 'soundvault-v2.6';
 const STATIC_ASSETS = ['./', './index.html', './style.css', './main.js', './manifest.json'];
-const AUDIO_CACHE = 'soundvault-audio-v1';
+const AUDIO_CACHE = 'soundvault-audio-v2.6';
 const MAX_AUDIO_CACHE_MB = 4096; // 4 GB limit for audio cache
 
 // ── Install ───────────────────────────────────────────────────
