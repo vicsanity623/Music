@@ -666,7 +666,8 @@ h2.section-title {
   pointer-events: none;
 }
 
-#search-input {
+#search-input,
+#artists-search-input {
   width: 100%;
   padding: 14px 20px 14px 46px;
   background: var(--bg-surface);
@@ -679,12 +680,14 @@ h2.section-title {
   transition: border-color var(--t), box-shadow var(--t);
 }
 
-#search-input:focus {
+#search-input:focus,
+#artists-search-input:focus {
   border-color: var(--red-dim);
   box-shadow: 0 0 0 3px var(--red-glow);
 }
 
-#search-input::placeholder {
+#search-input::placeholder,
+#artists-search-input::placeholder {
   color: var(--text-muted);
 }
 
