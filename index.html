@@ -143,36 +143,172 @@
       <div id="search-results"></div>
     </section>
 
-    <!-- Library / Album detail view -->
+    <!-- Library view -->
     <section id="view-library" class="view">
+
+      <!-- Library root: category menu like Apple Music -->
       <div id="library-root">
         <div class="view-header">
-          <h1 style="margin: 0;">Library</h1>
+          <h1 style="margin:0;">Your Library</h1>
         </div>
-
-        <!-- NEW: Apple Music style menu -->
-        <ul class="library-menu">
-          <li id="menu-playlists" onclick="switchView('playlists')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>
-            Playlists <span class="chevron">›</span>
+        <ul class="library-category-list">
+          <li class="library-category-item" data-category="playlists">
+            <div class="lib-cat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <circle cx="3" cy="6" r="1.5" fill="currentColor" />
+                <circle cx="3" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="3" cy="18" r="1.5" fill="currentColor" />
+              </svg>
+            </div>
+            <span class="lib-cat-label">Playlists</span>
+            <svg class="lib-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </li>
-          <li id="menu-artists" onclick="switchView('home')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            Artists <span class="chevron">›</span>
+          <li class="library-category-item" data-category="artists">
+            <div class="lib-cat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <span class="lib-cat-label">Artists</span>
+            <svg class="lib-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </li>
-          <li id="menu-albums" onclick="switchView('home')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            Albums <span class="chevron">›</span>
+          <li class="library-category-item" data-category="albums">
+            <div class="lib-cat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </div>
+            <span class="lib-cat-label">Albums</span>
+            <svg class="lib-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </li>
-          <li id="menu-songs">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-            Songs <span class="chevron">›</span>
+          <li class="library-category-item" data-category="songs">
+            <div class="lib-cat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M9 18V5l12-2v13"/>
+                <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+              </svg>
+            </div>
+            <span class="lib-cat-label">Songs</span>
+            <svg class="lib-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </li>
+          <li class="library-category-item" data-category="downloaded">
+            <div class="lib-cat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="8 12 12 16 16 12"/>
+                <line x1="12" y1="8" x2="12" y2="16"/>
+              </svg>
+            </div>
+            <span class="lib-cat-label">Downloaded</span>
+            <svg class="lib-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </li>
         </ul>
 
-        <h2 class="section-title">Recently Added</h2>
+        <!-- Recently Added -->
+        <h2 class="section-title" style="margin-top:32px;">Recently Added</h2>
+        <div id="library-albums-recent" class="card-grid"></div>
+      </div>
+
+      <!-- Albums sub-view -->
+      <div id="library-albums-view" class="hidden">
+        <div class="sub-view-header">
+          <button class="back-btn" id="btn-back-to-library-root">← Library</button>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <select id="library-sort"
+              style="background:var(--surface);color:var(--text);border:none;padding:6px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;background:var(--bg-active);color:var(--text-primary);">
+              <option value="newest">Newest</option>
+              <option value="a-z">A - Z</option>
+              <option value="z-a">Z - A</option>
+            </select>
+          </div>
+        </div>
+        <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:800;margin-bottom:20px;">Albums</h1>
         <div id="library-albums" class="card-grid"></div>
       </div>
+
+      <!-- Artists sub-view -->
+      <div id="library-artists-view" class="hidden">
+        <div class="sub-view-header">
+          <button class="back-btn" id="btn-back-to-library-from-artists">← Library</button>
+        </div>
+        <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:800;margin-bottom:20px;">Artists</h1>
+        <ul id="artists-list" class="artists-list"></ul>
+      </div>
+
+      <!-- Artist detail sub-view -->
+      <div id="library-artist-detail" class="hidden">
+        <button class="back-btn" id="btn-back-to-artists">← Artists</button>
+        <div class="artist-hero">
+          <div class="artist-avatar" id="artist-avatar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div class="album-meta">
+            <p class="meta-label">Artist</p>
+            <h1 id="artist-detail-name"></h1>
+            <p id="artist-detail-count" class="meta-count"></p>
+            <div class="album-actions">
+              <button class="btn-play-all" id="btn-play-artist">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9z"/></svg>
+                Play
+              </button>
+              <button class="btn-shuffle" id="btn-shuffle-artist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="16 3 21 3 21 8"/>
+                  <line x1="4" y1="20" x2="21" y2="3"/>
+                  <polyline points="21 16 21 21 16 21"/>
+                  <line x1="15" y1="15" x2="21" y2="21"/>
+                </svg>
+                Shuffle
+              </button>
+            </div>
+          </div>
+        </div>
+        <ul id="artist-track-list" class="track-list"></ul>
+      </div>
+
+      <!-- Songs sub-view -->
+      <div id="library-songs-view" class="hidden">
+        <div class="sub-view-header">
+          <button class="back-btn" id="btn-back-to-library-from-songs">← Library</button>
+        </div>
+        <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:800;margin-bottom:8px;">Songs</h1>
+        <div class="songs-actions">
+          <button class="btn-play-all" id="btn-play-all-songs">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9z"/></svg>
+            Play
+          </button>
+          <button class="btn-shuffle" id="btn-shuffle-all-songs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 3 21 3 21 8"/>
+              <line x1="4" y1="20" x2="21" y2="3"/>
+              <polyline points="21 16 21 21 16 21"/>
+              <line x1="15" y1="15" x2="21" y2="21"/>
+            </svg>
+            Shuffle
+          </button>
+        </div>
+        <ul id="all-songs-list" class="track-list songs-track-list"></ul>
+      </div>
+
+      <!-- Downloaded sub-view -->
+      <div id="library-downloaded-view" class="hidden">
+        <div class="sub-view-header">
+          <button class="back-btn" id="btn-back-to-library-from-downloaded">← Library</button>
+        </div>
+        <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:800;margin-bottom:20px;">Downloaded</h1>
+        <ul id="downloaded-songs-list" class="track-list songs-track-list"></ul>
+      </div>
+
+      <!-- Album detail sub-view -->
       <div id="album-detail" class="hidden">
         <button class="back-btn" id="btn-back-library">← Back</button>
         <div class="album-hero">
@@ -202,27 +338,7 @@
         </div>
         <ul id="track-list" class="track-list"></ul>
       </div>
-    </section>
-    
-    <!-- NEW: All Songs View -->
-    <section id="view-songs" class="view">
-      <button class="back-btn" id="btn-back-songs">← Back</button>
-      <div class="view-header" style="margin-bottom: 16px;">
-        <h1 style="margin: 0;">Songs</h1>
-      </div>
 
-      <div class="action-buttons-row">
-        <button class="action-btn-half" id="btn-play-all-songs">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M5 3l14 9-14 9z"/></svg>
-          Play
-        </button>
-        <button class="action-btn-half" id="btn-shuffle-all-songs">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-          Shuffle
-        </button>
-      </div>
-
-      <ul id="all-songs-list" style="list-style: none;"></ul>
     </section>
 
     <!-- Playlists view (mobile) -->
@@ -403,7 +519,6 @@
     <li class="separator"></li>
     <li id="ctx-add-playlist">Add to playlist</li>
     <li id="ctx-remove-playlist" class="hidden danger">Remove from playlist</li>
-
   </ul>
 
   <!-- ── Hidden audio element ───────────────────────────────── -->
