@@ -325,14 +325,14 @@ h2.section-title {
 }
 
 .lib-cat-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   color: #fa243c;
 }
 
 .lib-cat-label {
   flex: 1;
-  font-size: 0.95rem;
+  font-size: 1.1rem;
   font-weight: 500;
   color: #fa243c;
 }
