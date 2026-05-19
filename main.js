@@ -1137,10 +1137,19 @@ function setupMediaSession() {
 }
 function updateMediaSession(track) {
   if (!('mediaSession' in navigator)) return;
+
+  const artUrl = getAlbumArt(track.albumName);
+  
+  const artworkArray = artUrl ? [
+    { src: artUrl, sizes: '512x512', type: 'image/jpeg' },
+    { src: artUrl, sizes: '256x256', type: 'image/jpeg' }
+  ] : [];
+
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: track.albumName || 'SoundVault',
     album: track.albumName || '',
+    artwork: artworkArray
   });
   navigator.mediaSession.playbackState = 'playing';
 }
