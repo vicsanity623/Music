@@ -938,7 +938,6 @@ h2.section-title {
 #player-bar {
   grid-area: player;
   display: flex; /* Changed from grid */
-  justify-content: space-between; /* Pushes items to the edges */
   align-items: center;
   gap: 16px;
   padding: 0 20px env(safe-area-inset-bottom);
@@ -948,7 +947,6 @@ h2.section-title {
   -webkit-backdrop-filter: blur(20px);
   z-index: 100;
   transition: all var(--t);
-  min-height: var(--player-h); /* Allows it to grow when zoomed */
 }
 
 #player-bar.hidden {
@@ -1198,7 +1196,6 @@ h2.section-title {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  flex: 1; /* Lets it take up 1 part of the space */
   min-width: 0;
 }
 
