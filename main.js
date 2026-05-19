@@ -1132,6 +1132,8 @@ function setupMediaSession() {
   navigator.mediaSession.setActionHandler('seekto', e => {
     if (audio.duration) audio.currentTime = e.seekTime;
   });
+  navigator.mediaSession.setActionHandler('seekbackward', null);
+  navigator.mediaSession.setActionHandler('seekforward', null);
 }
 function updateMediaSession(track) {
   if (!('mediaSession' in navigator)) return;
