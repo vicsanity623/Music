@@ -1,6 +1,6 @@
 /* ============================================================
    SoundVault — Stylesheet
-   Aesthetic: Dark luxury / editorial — deep blacks, warm golds,
+   Aesthetic: Dark luxury / editorial — deep blacks, warm reds,
    generous space, cinematic typography
    ============================================================ */
 
@@ -29,9 +29,9 @@
   --text-muted: #4a4859;
 
   /* Accent */
-  --gold: #c8a96e;
-  --gold-dim: #7a6540;
-  --gold-glow: rgba(200, 169, 110, 0.18);
+  --red: #850f1c;
+  --red-dim: #3d0f15;
+  --red-glow: rgba(213, 0, 0, 1);
   --teal: #4ecdc4;
   --teal-dim: rgba(78, 205, 196, 0.15);
 
@@ -68,7 +68,7 @@ body {
   background: var(--bg-deep);
   color: var(--text-primary);
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   grid-template-rows: 1fr var(--player-h);
   grid-template-areas:
     "sidebar main"
@@ -112,7 +112,7 @@ body {
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--gold);
+  color: var(--red);
   border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
 }
@@ -120,7 +120,7 @@ body {
 .sidebar-logo svg {
   width: 28px;
   height: 28px;
-  color: var(--gold);
+  color: var(--red);
 }
 
 .sidebar-nav {
@@ -158,7 +158,7 @@ body {
 
 .nav-btn.active {
   background: var(--bg-active);
-  color: var(--gold);
+  color: var(--red);
 }
 
 .sidebar-section {
@@ -222,7 +222,7 @@ body {
 }
 
 #sidebar-playlists li.active {
-  color: var(--gold);
+  color: var(--red);
 }
 
 /* ── Main content ──────────────────────────────────────────── */
@@ -281,6 +281,260 @@ h2.section-title {
   color: var(--text-primary);
 }
 
+/* ── Library Category List (Apple Music style) ─────────────── */
+.library-category-list {
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.library-category-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background var(--t);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.library-category-item:last-child {
+  border-bottom: none;
+}
+
+.library-category-item:hover {
+  background: var(--bg-hover);
+}
+
+.library-category-item:active {
+  background: var(--bg-active);
+}
+
+.lib-cat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lib-cat-icon svg {
+  width: 24px;
+  height: 24px;
+  color: #fa243c;
+}
+
+.lib-cat-label {
+  flex: 1;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #fa243c;
+}
+
+.lib-cat-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ── Sub-view header ───────────────────────────────────────── */
+.sub-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+/* ── Songs actions bar ─────────────────────────────────────── */
+.songs-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* ── Songs track list (with album art thumbnails) ──────────── */
+.songs-track-list li {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--t);
+  user-select: none;
+}
+
+.songs-track-list li:hover {
+  background: var(--bg-hover);
+}
+
+.song-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.song-info {
+  min-width: 0;
+}
+
+.song-info .track-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.song-info .player-album {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Artists list ──────────────────────────────────────────── */
+.artists-list {
+  list-style: none;
+}
+
+.artist-list-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--t);
+  user-select: none;
+}
+
+.artist-list-item:hover {
+  background: var(--bg-hover);
+}
+
+.artist-list-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+
+.artist-list-avatar svg {
+  width: 22px;
+  height: 22px;
+  color: var(--text-muted);
+}
+
+.artist-list-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.artist-list-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.artist-list-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.artist-separator {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 16px 0 8px 12px;
+}
+
+.az-scroll-container {
+  position: sticky;
+  top: 100px;
+  height: calc(100vh - 300px);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  margin-left: 10px;
+  padding-right: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--red);
+  user-select: none;
+  touch-action: none;
+}
+
+.az-char {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  transition: background var(--t), color var(--t);
+}
+
+.az-char:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ── Artist detail hero ────────────────────────────────────── */
+.artist-hero {
+  display: flex;
+  gap: 28px;
+  align-items: flex-end;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.artist-avatar {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: var(--bg-active);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  border: 2px solid var(--border-hi);
+}
+
+.artist-avatar svg {
+  width: 50%;
+  height: 50%;
+  color: var(--text-muted);
+}
+
 /* ── Card grid ─────────────────────────────────────────────── */
 .card-grid {
   display: grid;
@@ -335,7 +589,7 @@ h2.section-title {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--gold);
+  background: var(--red);
   border: none;
   cursor: pointer;
   display: flex;
@@ -426,8 +680,8 @@ h2.section-title {
 }
 
 #search-input:focus {
-  border-color: var(--gold-dim);
-  box-shadow: 0 0 0 3px var(--gold-glow);
+  border-color: var(--red-dim);
+  box-shadow: 0 0 0 3px var(--red-glow);
 }
 
 #search-input::placeholder {
@@ -536,8 +790,8 @@ h2.section-title {
   align-items: center;
   gap: 8px;
   padding: 12px 28px;
-  background: var(--gold);
-  color: #0a0a0f;
+  background: var(--red);
+  color: #fa243c;
   border: none;
   border-radius: var(--radius-pill);
   font-family: var(--font-body);
@@ -568,7 +822,7 @@ h2.section-title {
   background: transparent;
   border: 1px solid var(--border-hi);
   border-radius: var(--radius-pill);
-  color: var(--text-primary);
+  color: #fa243c;
   font-family: var(--font-body);
   font-size: 0.88rem;
   font-weight: 500;
@@ -628,7 +882,7 @@ h2.section-title {
 
 .track-list li.active {
   background: var(--bg-active);
-  color: var(--gold);
+  color: var(--red);
 }
 
 .track-num {
@@ -639,7 +893,7 @@ h2.section-title {
 }
 
 .track-list li.active .track-num {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .playing-indicator {
@@ -652,7 +906,7 @@ h2.section-title {
 .playing-indicator span {
   display: inline-block;
   width: 3px;
-  background: var(--gold);
+  background: var(--red);
   border-radius: 2px;
   animation: bar-bounce 0.8s ease infinite;
 }
@@ -698,7 +952,7 @@ h2.section-title {
 }
 
 .track-list li.active .track-title {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .track-duration {
@@ -723,7 +977,7 @@ h2.section-title {
   display: grid;
   grid-template-columns: 1fr 2fr 1fr;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   padding: 0 20px env(safe-area-inset-bottom);
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
@@ -850,11 +1104,11 @@ h2.section-title {
 }
 
 .player-like.liked {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .player-like.liked svg {
-  fill: var(--gold);
+  fill: var(--red);
 }
 
 /* Controls */
@@ -895,7 +1149,7 @@ h2.section-title {
 }
 
 .ctrl-btn.active {
-  color: var(--gold);
+  color: var(--red);
 }
 
 .ctrl-play {
@@ -914,7 +1168,7 @@ h2.section-title {
 }
 
 .ctrl-play:hover {
-  background: var(--gold);
+  background: var(--red);
   color: var(--bg-deep);
 }
 
@@ -952,7 +1206,7 @@ h2.section-title {
 }
 
 .progress-track:hover .progress-bar {
-  background: var(--gold);
+  background: var(--red);
 }
 
 .progress-thumb {
@@ -1021,7 +1275,7 @@ h2.section-title {
 }
 
 #volume-slider:hover::-webkit-slider-thumb {
-  background: var(--gold);
+  background: var(--red);
 }
 
 /* ── Panels ────────────────────────────────────────────────── */
@@ -1092,114 +1346,6 @@ h2.section-title {
   color: var(--text-muted);
 }
 
-/* Stems panel */
-#stems-tracks {
-  padding: 14px 18px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.stem-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.stem-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  width: 48px;
-  flex-shrink: 0;
-}
-
-.stem-label.vocals {
-  color: #e8a0d0;
-}
-
-.stem-label.drums {
-  color: #a0d0e8;
-}
-
-.stem-label.bass {
-  color: #c8a96e;
-}
-
-.stem-label.other {
-  color: #a0e8a0;
-}
-
-.stem-solo {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  padding: 2px 7px;
-  cursor: pointer;
-  transition: all var(--t);
-}
-
-.stem-solo.active {
-  border-color: var(--gold);
-  color: var(--gold);
-}
-
-.stem-vol {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  height: 4px;
-  background: var(--bg-active);
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-}
-
-.stem-vol::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.stem-row:nth-child(1) .stem-vol::-webkit-slider-thumb {
-  background: #e8a0d0;
-}
-
-.stem-row:nth-child(2) .stem-vol::-webkit-slider-thumb {
-  background: #a0d0e8;
-}
-
-.stem-row:nth-child(3) .stem-vol::-webkit-slider-thumb {
-  background: #c8a96e;
-}
-
-.stem-row:nth-child(4) .stem-vol::-webkit-slider-thumb {
-  background: #a0e8a0;
-}
-
-.stem-mute {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 2px;
-  transition: color var(--t);
-  font-size: 1rem;
-}
-
-.stem-mute:hover {
-  color: var(--text-primary);
-}
-
-.stem-mute.muted {
-  color: #ff6060;
-}
-
 /* Queue panel */
 #queue-list {
   list-style: none;
@@ -1223,7 +1369,7 @@ h2.section-title {
 }
 
 #queue-list li.current {
-  color: var(--gold);
+  color: var(--red);
 }
 
 #queue-list .q-num {
@@ -1298,7 +1444,7 @@ h2.section-title {
 }
 
 #modal-body input:focus {
-  border-color: var(--gold-dim);
+  border-color: var(--red-dim);
 }
 
 .modal-pl-item {
@@ -1317,7 +1463,7 @@ h2.section-title {
 }
 
 .modal-pl-item .add-check {
-  color: var(--gold);
+  color: var(--red);
   display: none;
 }
 
@@ -1331,9 +1477,9 @@ h2.section-title {
   justify-content: flex-end;
 }
 
-.btn-gold {
+.btn-red {
   padding: 10px 22px;
-  background: var(--gold);
+  background: var(--red);
   color: #0a0a0f;
   border: none;
   border-radius: var(--radius-pill);
@@ -1344,7 +1490,7 @@ h2.section-title {
   transition: opacity var(--t);
 }
 
-.btn-gold:hover {
+.btn-red:hover {
   opacity: 0.85;
 }
 
@@ -1469,7 +1615,7 @@ h2.section-title {
   width: 36px;
   height: 36px;
   border: 3px solid var(--border);
-  border-top-color: var(--gold);
+  border-top-color: var(--red);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 16px;
@@ -1484,7 +1630,7 @@ h2.section-title {
 /* ── Responsive: tablet ────────────────────────────────────── */
 @media (max-width: 900px) {
   body {
-    grid-template-columns: 64px 1fr;
+    grid-template-columns: 64px minmax(0, 1fr);
     grid-template-rows: 1fr var(--player-h);
   }
 
@@ -1523,19 +1669,121 @@ h2.section-title {
     height: 160px;
   }
 
+  .artist-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .artist-avatar {
+    width: 120px;
+    height: 120px;
+  }
+
   .volume-wrap {
     display: none;
   }
 
-  #player-bar {
-    grid-template-columns: 1fr auto 1fr;
+  #player-bar:not(.fullscreen) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    border-radius: var(--radius-lg);
+    background: var(--bg-raised);
+    height: 56px;
+    padding: 6px 12px 6px 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-hi);
+  }
+
+  #player-bar:not(.fullscreen) .player-track {
+    flex: 1;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  #player-bar:not(.fullscreen) .player-art {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+
+  #player-bar:not(.fullscreen) .player-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  #player-bar:not(.fullscreen) .player-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    display: block;
+    padding: 0;
+    animation: none;
+  }
+
+  #player-bar:not(.fullscreen) .player-album,
+  #player-bar:not(.fullscreen) .player-like,
+  #player-bar:not(.fullscreen) .player-add {
+    display: none;
+  }
+
+  #player-bar:not(.fullscreen) .player-controls {
+    display: flex;
+    width: auto;
+    margin: 0;
+  }
+
+  #player-bar:not(.fullscreen) .player-top-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    justify-content: flex-end;
+  }
+
+  #player-bar:not(.fullscreen) .player-progress-row,
+  #player-bar:not(.fullscreen) #btn-shuffle,
+  #player-bar:not(.fullscreen) #btn-prev,
+  #player-bar:not(.fullscreen) #btn-repeat {
+    display: none;
+  }
+
+  #player-bar:not(.fullscreen) .ctrl-btn {
+    width: 32px;
+    height: 32px;
+    padding: 4px;
+    color: var(--text-primary);
+  }
+
+  #player-bar:not(.fullscreen) .ctrl-play {
+    width: 32px;
+    height: 32px;
+    background: transparent;
+  }
+  
+  #player-bar:not(.fullscreen) .ctrl-play svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  #player-bar:not(.fullscreen) .player-right {
+    display: none;
   }
 }
 
 /* ── Responsive: mobile ────────────────────────────────────── */
 @media (max-width: 600px) {
   body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 1fr auto auto;
     grid-template-areas:
       "main"
@@ -1577,7 +1825,7 @@ h2.section-title {
   }
 
   .mnav-btn.active {
-    color: var(--gold);
+    color: var(--red);
   }
 
   #main-content {
@@ -1585,18 +1833,8 @@ h2.section-title {
     overflow-y: auto;
   }
 
-  #player-bar {
-    grid-template-columns: 1fr auto;
-    padding: 0 12px;
-    height: var(--player-h-mob);
-  }
-
-  #player-bar:not(.fullscreen) .player-controls {
-    display: none;
-  }
-
-  #player-bar:not(.fullscreen) .player-right {
-    display: none;
+  #player-bar:not(.fullscreen) {
+    margin: 0 8px 8px 8px; /* Tighter margins on small mobile, no safe area because mobile-nav is below */
   }
 
   .card-grid {
@@ -1607,6 +1845,11 @@ h2.section-title {
   .album-art-lg {
     width: 130px;
     height: 130px;
+  }
+
+  .artist-avatar {
+    width: 100px;
+    height: 100px;
   }
 
   .album-meta h1 {
@@ -1621,6 +1864,14 @@ h2.section-title {
   .volume-wrap {
     display: none;
   }
+
+  .library-category-item {
+    padding: 16px;
+  }
+
+  .lib-cat-label {
+    font-size: 1rem;
+  }
 }
 
 /* ── iOS safe areas ────────────────────────────────────────── */
@@ -1631,11 +1882,22 @@ h2.section-title {
     min-height: var(--player-h);
   }
 
-  /* On mobile PWA (standalone), the status bar sits on top of the viewport.
-     Ensure the bottom nav also clears the home indicator on iPhone. */
+  @media (max-width: 900px) {
+    #player-bar:not(.fullscreen) {
+      padding-bottom: 6px;
+      height: 56px;
+      min-height: 56px;
+    }
+  }
+
   @media (max-width: 600px) {
     #mobile-nav {
-      padding-bottom: max(env(safe-area-inset-bottom), 8px);
+      /* 
+        HOW TO ADJUST BOTTOM SPACING:
+        Currently this uses 'env(safe-area-inset-bottom)' which is Apple's default padding to clear the home swipe bar (about ~34px). 
+        To move the nav bar closer to the bottom edge, you can multiply it by a decimal like 0.5, or replace it entirely with a fixed pixel value (e.g. padding-bottom: 12px;).
+      */
+      padding-bottom: calc(env(safe-area-inset-bottom) * 0.6);
     }
   }
 }

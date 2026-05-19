@@ -1,11 +1,11 @@
 // ============================================================
-//  SoundVault — Service Worker  v2.3
+//  SoundVault — Service Worker  v3.1
 // ============================================================
 
-const CACHE_NAME = 'soundvault-v2.3';
+const CACHE_NAME = 'soundvault-v3.1';
 const STATIC_ASSETS = ['./', './index.html', './style.css', './main.js', './manifest.json'];
-const AUDIO_CACHE = 'soundvault-audio-v1';
-const MAX_AUDIO_CACHE_MB = 2048; // 2 GB limit for audio cache
+const AUDIO_CACHE = 'soundvault-audio-v3.1';
+const MAX_AUDIO_CACHE_MB = 4096; // 4 GB limit for audio cache
 
 // ── Install ───────────────────────────────────────────────────
 self.addEventListener('install', event => {

@@ -5,5 +5,7 @@ __pycache__
 .DS_Store
 download_and_stem.sh
 serve.sh
+/benchmarks
+roadmap.md
 *.crt
 *.key

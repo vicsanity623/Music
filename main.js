@@ -21,9 +21,12 @@ const state = {
   currentTrack: null,
   playlists: [],     // [{id, name, tracks:[...]}]
   liked: new Set(),
+  downloaded: new Set(), // paths cached for offline
   view: 'home',
   albumView: null,   // current album name in detail view
+  artistView: null,  // current artist name in detail view
   playlistView: null,   // current playlist id
+  librarySubView: null, // 'albums' | 'artists' | 'songs' | 'downloaded' | null
   ctxTrack: null,   // track targeted by context menu
   ctxPlaylistId: null,
   audioCtx: null,
@@ -61,6 +64,8 @@ function loadPersistedData() {
     if (pl) state.playlists = JSON.parse(pl);
     const liked = localStorage.getItem('sv_liked');
     if (liked) state.liked = new Set(JSON.parse(liked));
+    const dl = localStorage.getItem('sv_downloaded');
+    if (dl) state.downloaded = new Set(JSON.parse(dl));
   } catch (e) { console.warn('Persistence load error', e); }
 }
 
@@ -68,12 +73,12 @@ function persist() {
   try {
     localStorage.setItem('sv_playlists', JSON.stringify(state.playlists));
     localStorage.setItem('sv_liked', JSON.stringify([...state.liked]));
+    localStorage.setItem('sv_downloaded', JSON.stringify([...state.downloaded]));
   } catch (e) { }
 }
 
 // ── Load library ─────────────────────────────────────────────
 async function loadLibrary() {
-  const main = $('main-content');
   const spinner = document.createElement('div');
   spinner.id = 'global-spinner';
   spinner.innerHTML = `<div class="loading-msg" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="loading-spinner"></div><p>Loading library…</p></div>`;
@@ -105,6 +110,7 @@ function setupGreeting() {
 // ── Render everything ─────────────────────────────────────────
 function renderAll() {
   renderHomeAlbums();
+  renderLibraryRecent();
   renderLibraryAlbums();
   renderSidebarPlaylists();
   renderMobilePlaylists();
@@ -120,6 +126,18 @@ function renderHomeAlbums() {
     return;
   }
   state.library.albums.forEach((album, i) => {
+    grid.appendChild(makeAlbumCard(album, i));
+  });
+}
+
+// Recently added (reversed, first 8)
+function renderLibraryRecent() {
+  const grid = $('library-albums-recent');
+  if (!grid) return;
+  grid.innerHTML = '';
+  if (!state.library?.albums?.length) return;
+  const recent = [...state.library.albums].reverse().slice(0, 8);
+  recent.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
 }
@@ -144,6 +162,243 @@ function renderLibraryAlbums() {
   albums.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
+}
+
+// ── Artists helpers ───────────────────────────────────────────
+function getArtistsMap() {
+  // Build a map: artistName -> { tracks: [...], artistArt: string }
+  // Artist is derived from album name by stripping " - AlbumTitle" pattern,
+  // or we use the full album name as artist if no separator found.
+  const map = new Map();
+  if (!state.library?.albums) return map;
+  state.library.albums.forEach(album => {
+    // Try to extract artist from "Artist - Album" format
+    const sepIdx = album.name.indexOf(' - ');
+    const artist = sepIdx > -1 ? album.name.substring(0, sepIdx) : album.name;
+    if (!map.has(artist)) map.set(artist, { tracks: [], artistArt: null });
+    
+    if (album.artist_art && !map.get(artist).artistArt) {
+      map.get(artist).artistArt = album.artist_art;
+    }
+
+    album.tracks.forEach(t => {
+      map.get(artist).tracks.push({ ...t, albumName: album.name });
+    });
+  });
+  return map;
+}
+
+function renderArtistsList(filterText = '') {
+  const ul = $('artists-list');
+  const scrollContainer = $('artists-az-scroll');
+  if (!ul) return;
+  ul.innerHTML = '';
+  if (scrollContainer) scrollContainer.innerHTML = '';
+
+  const map = getArtistsMap();
+  let sorted = [...map.keys()].sort((a, b) => a.localeCompare(b));
+  
+  if (filterText) {
+    const lower = filterText.toLowerCase();
+    sorted = sorted.filter(a => a.toLowerCase().includes(lower));
+  }
+  
+  if (!sorted.length) {
+    ul.innerHTML = `<p class="loading-msg">No artists found.</p>`;
+    return;
+  }
+  
+  let currentLetter = '';
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('');
+  
+  // Set up A-Z scroll bar
+  if (!filterText && scrollContainer) {
+    alphabet.forEach(char => {
+      const el = document.createElement('div');
+      el.className = 'az-char';
+      el.textContent = char;
+      el.addEventListener('click', () => {
+        const target = document.getElementById(`artist-sep-${char === '#' ? 'num' : char}`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      scrollContainer.appendChild(el);
+    });
+  }
+
+  sorted.forEach(artist => {
+    const data = map.get(artist);
+    const tracks = data.tracks;
+    
+    // Check for letter separator
+    const firstChar = artist.charAt(0).toUpperCase();
+    const letter = /[A-Z]/.test(firstChar) ? firstChar : '#';
+    if (!filterText && letter !== currentLetter) {
+      currentLetter = letter;
+      const sep = document.createElement('div');
+      sep.className = 'artist-separator';
+      sep.id = `artist-sep-${currentLetter === '#' ? 'num' : currentLetter}`;
+      sep.textContent = currentLetter;
+      ul.appendChild(sep);
+    }
+
+    const li = document.createElement('li');
+    li.className = 'artist-list-item';
+    
+    let artHtml = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                     <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                     <circle cx="12" cy="7" r="4"/>
+                   </svg>`;
+    let avatarStyle = '';
+    if (data.artistArt) {
+      artHtml = `<img src="${BASE_URL}/${data.artistArt}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy" />`;
+      avatarStyle = 'background:transparent;border:none;';
+    }
+
+    li.innerHTML = `
+      <div class="artist-list-avatar" style="${avatarStyle}">
+        ${artHtml}
+      </div>
+      <div class="artist-list-info">
+        <span class="artist-list-name">${escHtml(artist)}</span>
+        <span class="artist-list-count">${tracks.length} song${tracks.length !== 1 ? 's' : ''}</span>
+      </div>
+      <svg class="lib-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    `;
+    li.addEventListener('click', () => openArtistDetail(artist, tracks, data.artistArt));
+    ul.appendChild(li);
+  });
+}
+
+function openArtistDetail(artist, tracks, artistArt) {
+  state.artistView = artist;
+  $('artist-detail-name').textContent = artist;
+  $('artist-detail-count').textContent = `${tracks.length} song${tracks.length !== 1 ? 's' : ''}`;
+  
+  const avatarIcon = $('artist-avatar-icon');
+  if (avatarIcon) {
+    if (artistArt) {
+      avatarIcon.innerHTML = `<img src="${BASE_URL}/${artistArt}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+      avatarIcon.style.background = 'transparent';
+      avatarIcon.style.border = 'none';
+    } else {
+      avatarIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+      avatarIcon.style.background = 'var(--bg-active)';
+      avatarIcon.style.border = '2px solid var(--border-hi)';
+    }
+  }
+
+  renderTrackList('artist-track-list', tracks, null, null);
+  showLibrarySubView('artist-detail');
+}
+
+// ── Songs sub-view ────────────────────────────────────────────
+function renderAllSongs() {
+  const ul = $('all-songs-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  if (!state.library?.albums) return;
+  const allTracks = [];
+  state.library.albums.forEach(album => {
+    album.tracks.forEach(t => allTracks.push({ ...t, albumName: album.name }));
+  });
+  allTracks.sort((a, b) => a.title.localeCompare(b.title));
+  renderSongsIntoList(ul, allTracks);
+}
+
+// ── Downloaded sub-view ───────────────────────────────────────
+function renderDownloadedSongs() {
+  const ul = $('downloaded-songs-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  if (!state.library?.albums) return;
+  const allTracks = [];
+  state.library.albums.forEach(album => {
+    album.tracks.forEach(t => {
+      if (state.downloaded.has(t.path)) {
+        allTracks.push({ ...t, albumName: album.name });
+      }
+    });
+  });
+  const actions = $('downloaded-actions');
+  if (!allTracks.length) {
+    ul.innerHTML = `<p class="loading-msg" style="padding:40px 20px;">No downloaded songs yet.<br><small style="opacity:.6">Songs are saved when you play them.</small></p>`;
+    if (actions) actions.classList.add('hidden');
+    return;
+  }
+  if (actions) actions.classList.remove('hidden');
+  renderSongsIntoList(ul, allTracks);
+}
+
+function renderSongsIntoList(ul, tracks) {
+  tracks.forEach((track, i) => {
+    const li = document.createElement('li');
+    li.className = 'songs-list-item';
+    const artUrl = getAlbumArt(track.albumName);
+    const isDownloaded = state.downloaded.has(track.path);
+    const addBtnColor = isDownloaded ? 'var(--red)' : 'var(--text-muted)';
+    li.innerHTML = `
+      <div class="song-thumb" style="${artUrl ? 'background:#111118;' : 'background:var(--bg-active);'}">
+        ${artUrl
+        ? `<img src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
+      }
+      </div>
+      <div class="song-info">
+        <p class="track-title">${escHtml(track.title)}</p>
+        <p class="player-album">${escHtml(track.albumName || '')}</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="track-format">${track.format || 'MP3'}</span>
+        <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+    `;
+    li.addEventListener('click', () => {
+      state.queue = tracks;
+      state.queueIndex = i;
+      playCurrentQueueItem();
+    });
+    li.querySelector('.track-add-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      openAddToPlaylistModal([{ ...track }]);
+    });
+    li.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      openContextMenu(e, track, null);
+    });
+    ul.appendChild(li);
+  });
+}
+
+// ── Library sub-view switcher ─────────────────────────────────
+function showLibrarySubView(name) {
+  // name: null | 'albums' | 'artists' | 'artist-detail' | 'songs' | 'downloaded' | 'album-detail'
+  state.librarySubView = name;
+
+  const views = [
+    'library-root',
+    'library-albums-view',
+    'library-artists-view',
+    'library-artist-detail',
+    'library-songs-view',
+    'library-downloaded-view',
+    'album-detail',
+  ];
+  views.forEach(id => {
+    const el = $(id);
+    if (el) el.classList.add('hidden');
+  });
+
+  if (!name) {
+    $('library-root').classList.remove('hidden');
+  } else if (name === 'album-detail') {
+    $('album-detail').classList.remove('hidden');
+  } else if (name === 'artist-detail') {
+    $('library-artist-detail').classList.remove('hidden');
+  } else {
+    $(`library-${name}-view`)?.classList.remove('hidden');
+  }
 }
 
 // ── Album art helper ──────────────────────────────────────────
@@ -190,8 +445,7 @@ function openAlbumDetail(album) {
   $('detail-art').style.background = artUrl ? '#111118' : '';
   renderTrackList('track-list', album.tracks, album.name, null);
   switchView('library');
-  $('library-root').classList.add('hidden');
-  $('album-detail').classList.remove('hidden');
+  showLibrarySubView('album-detail');
 }
 
 function renderTrackList(listId, tracks, albumName, playlistId) {
@@ -204,8 +458,9 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
     li.dataset.playlistId = playlistId || '';
 
     const isActive = state.currentTrack && state.currentTrack.path === track.path;
-
     li.className = isActive ? 'active' : '';
+    const isDownloaded = state.downloaded.has(track.path);
+    const addBtnColor = isDownloaded ? 'var(--red)' : 'var(--text-muted)';
     li.innerHTML = `
       <div class="track-num">
         <span class="track-num-wrap">${i + 1}</span>
@@ -215,18 +470,19 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
       </div>
       <div class="track-info">
         <p class="track-title">${escHtml(track.title)}</p>
+        ${albumName === null && track.albumName ? `<p class="player-album" style="font-size:0.78rem;color:var(--text-muted);">${escHtml(track.albumName)}</p>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:12px">
         <span class="track-format">${track.format || 'MP3'}</span>
-        <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;" title="Add to Playlist">
+        <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
     `;
-    li.addEventListener('click', () => playTrackFromContext(tracks, i, albumName));
+    li.addEventListener('click', () => playTrackFromContext(tracks, i, albumName || track.albumName));
     li.querySelector('.track-add-btn').addEventListener('click', e => {
       e.stopPropagation();
-      openAddToPlaylistModal([{ ...track, albumName }]);
+      openAddToPlaylistModal([{ ...track, albumName: albumName || track.albumName }]);
     });
     li.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -237,7 +493,7 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
 }
 
 function playTrackFromContext(tracks, index, albumName) {
-  state.queue = tracks.map(t => ({ ...t, albumName }));
+  state.queue = tracks.map(t => ({ ...t, albumName: albumName || t.albumName }));
   state.queueIndex = index;
   playCurrentQueueItem();
 }
@@ -265,11 +521,12 @@ function playCurrentQueueItem() {
   if (state.queueIndex < 0 || state.queueIndex >= state.queue.length) return;
   const track = state.queue[state.queueIndex];
   state.currentTrack = track;
+  updateMediaSession(track);
   loadAndPlay(track);
   updatePlayerUI(track);
   updateTrackListHighlight();
   renderQueuePanel();
-  updateMediaSession(track);
+  downloadForOffline(track);
 }
 
 function loadAndPlay(track) {
@@ -304,7 +561,6 @@ function updateTrackListHighlight() {
   if (!state.currentTrack) return;
   $$('.track-list li').forEach(li => {
     const idx = parseInt(li.dataset.index);
-    const album = li.dataset.album;
     const track = state.queue[state.queueIndex];
     if (track && state.queue[idx]?.path === track.path) {
       li.classList.add('active');
@@ -392,6 +648,119 @@ function setupEventListeners() {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
 
+  // Library category items
+  $$('.library-category-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const cat = item.dataset.category;
+      switchView('library');
+      if (cat === 'albums') {
+        renderLibraryAlbums();
+        showLibrarySubView('albums');
+      } else if (cat === 'artists') {
+        renderArtistsList();
+        showLibrarySubView('artists');
+      } else if (cat === 'songs') {
+        renderAllSongs();
+        showLibrarySubView('songs');
+      } else if (cat === 'downloaded') {
+        renderDownloadedSongs();
+        showLibrarySubView('downloaded');
+      } else if (cat === 'playlists') {
+        switchView('playlists');
+      }
+    });
+  });
+
+  // Back buttons for library sub-views
+  $('btn-back-to-library-root')?.addEventListener('click', () => showLibrarySubView(null));
+  $('btn-back-to-library-from-artists')?.addEventListener('click', () => showLibrarySubView(null));
+  $('btn-back-to-library-from-songs')?.addEventListener('click', () => showLibrarySubView(null));
+  $('btn-back-to-library-from-downloaded')?.addEventListener('click', () => showLibrarySubView(null));
+  $('btn-back-to-artists')?.addEventListener('click', () => {
+    renderArtistsList();
+    showLibrarySubView('artists');
+  });
+
+  // Artist play / shuffle
+  $('btn-play-artist')?.addEventListener('click', () => {
+    if (!state.artistView) return;
+    const map = getArtistsMap();
+    const data = map.get(state.artistView);
+    if (data && data.tracks.length) {
+      state.queue = [...data.tracks];
+      state.queueIndex = 0;
+      playCurrentQueueItem();
+    }
+  });
+  $('btn-shuffle-artist')?.addEventListener('click', () => {
+    if (!state.artistView) return;
+    const map = getArtistsMap();
+    const data = map.get(state.artistView);
+    if (data && data.tracks.length) {
+      state.queue = [...data.tracks];
+      shuffleArray(state.queue);
+      state.queueIndex = 0;
+      playCurrentQueueItem();
+    }
+  });
+
+  // All songs play / shuffle
+  $('btn-play-all-songs')?.addEventListener('click', () => {
+    if (!state.library?.albums) return;
+    const allTracks = [];
+    state.library.albums.forEach(album => {
+      album.tracks.forEach(t => allTracks.push({ ...t, albumName: album.name }));
+    });
+    allTracks.sort((a, b) => a.title.localeCompare(b.title));
+    state.queue = allTracks;
+    state.queueIndex = 0;
+    playCurrentQueueItem();
+  });
+  $('btn-shuffle-all-songs')?.addEventListener('click', () => {
+    if (!state.library?.albums) return;
+    const allTracks = [];
+    state.library.albums.forEach(album => {
+      album.tracks.forEach(t => allTracks.push({ ...t, albumName: album.name }));
+    });
+    shuffleArray(allTracks);
+    state.queue = allTracks;
+    state.queueIndex = 0;
+    playCurrentQueueItem();
+  });
+
+  // Downloaded play / shuffle
+  $('btn-play-downloaded')?.addEventListener('click', () => {
+    if (!state.library?.albums) return;
+    const allTracks = [];
+    state.library.albums.forEach(album => {
+      album.tracks.forEach(t => {
+        if (state.downloaded.has(t.path)) {
+          allTracks.push({ ...t, albumName: album.name });
+        }
+      });
+    });
+    if (!allTracks.length) return;
+    state.queue = allTracks;
+    state.queueIndex = 0;
+    playCurrentQueueItem();
+  });
+  $('btn-shuffle-downloaded')?.addEventListener('click', () => {
+    if (!state.library?.albums) return;
+    const allTracks = [];
+    state.library.albums.forEach(album => {
+      album.tracks.forEach(t => {
+        if (state.downloaded.has(t.path)) {
+          allTracks.push({ ...t, albumName: album.name });
+        }
+      });
+    });
+    if (!allTracks.length) return;
+    shuffleArray(allTracks);
+    state.queue = allTracks;
+    state.queueIndex = 0;
+    playCurrentQueueItem();
+  });
+
   // Play / Pause
   $('btn-play-pause').addEventListener('click', togglePlayPause);
 
@@ -439,8 +808,10 @@ function setupEventListeners() {
 
   // Back from album detail
   $('btn-back-library').addEventListener('click', () => {
-    $('album-detail').classList.add('hidden');
-    $('library-root').classList.remove('hidden');
+    // Go back to wherever album was opened from
+    if (state.librarySubView === 'album-detail') {
+      showLibrarySubView(null);
+    }
   });
 
   // Back from playlist detail
@@ -511,7 +882,6 @@ function setupEventListeners() {
   // Context menu
   $('ctx-play').addEventListener('click', () => {
     if (state.ctxTrack) {
-      const q = state.queue.length ? state.queue : [state.ctxTrack];
       state.queue = [state.ctxTrack];
       state.queueIndex = 0;
       playCurrentQueueItem();
@@ -547,7 +917,6 @@ function setupEventListeners() {
     hideContextMenu();
   });
 
-
   // Hide context menu on outside click
   document.addEventListener('click', e => {
     if (!$('context-menu').contains(e.target)) hideContextMenu();
@@ -555,6 +924,11 @@ function setupEventListeners() {
 
   // Search
   $('search-input').addEventListener('input', debounce(handleSearch, 150));
+  
+  // Artists Search
+  $('artists-search-input')?.addEventListener('input', e => {
+    renderArtistsList(e.target.value.trim());
+  });
 }
 
 // ── View switching ────────────────────────────────────────────
@@ -568,10 +942,11 @@ function switchView(viewName) {
     btn.classList.toggle('active', btn.dataset.view === viewName);
   });
 
-  // Restore library sub-views
+  // When switching to library, restore root unless sub-view is set
   if (viewName === 'library') {
-    $('library-root').classList.remove('hidden');
-    $('album-detail').classList.add('hidden');
+    if (!state.librarySubView) {
+      showLibrarySubView(null);
+    }
   }
 }
 
@@ -683,7 +1058,6 @@ function openPlaylistDetail(pl) {
   renderTrackList('pl-track-list', pl.tracks, null, pl.id);
   renderSidebarPlaylists();
 
-  // On mobile switch to playlist detail
   $$('.view').forEach(v => v.classList.remove('active'));
   $('view-playlist-detail').classList.add('active');
 }
@@ -731,7 +1105,6 @@ function openAddToPlaylistModal(tracks) {
 
   openModal('Add to Playlist', bodyHtml, []);
 
-  // Handle clicking on existing playlists
   $$('#pl-modal-list .modal-pl-item').forEach(item => {
     item.addEventListener('click', () => {
       const pl = state.playlists.find(p => p.id === item.dataset.pl);
@@ -749,7 +1122,6 @@ function openAddToPlaylistModal(tracks) {
     });
   });
 
-  // Handle quick playlist creation
   const quickInput = $('quick-pl-name');
   const quickBtn = $('btn-quick-create-pl');
 
@@ -757,13 +1129,10 @@ function openAddToPlaylistModal(tracks) {
     const name = quickInput.value.trim() || 'My Playlist';
     const plId = `pl_${Date.now()}`;
     const newPl = { id: plId, name, tracks: [] };
-
-    // Add selected tracks to the new playlist
     tracks.forEach(t => {
       newPl.tracks.push(t);
       downloadForOffline(t);
     });
-
     state.playlists.push(newPl);
     persist();
     renderSidebarPlaylists();
@@ -775,10 +1144,7 @@ function openAddToPlaylistModal(tracks) {
   if (quickBtn && quickInput) {
     quickBtn.addEventListener('click', createAndAdd);
     quickInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        createAndAdd();
-      }
+      if (e.key === 'Enter') { e.preventDefault(); createAndAdd(); }
     });
   }
 }
@@ -788,7 +1154,6 @@ function openModal(title, bodyHtml, buttons) {
   $('modal-title').textContent = title;
   $('modal-body').innerHTML = bodyHtml;
   const actions = $('modal-overlay').querySelector('.modal-actions');
-  // Remove any extra buttons inside actions
   $$('#modal .modal-actions .btn-gold, #modal .modal-actions .btn-action').forEach(b => b.remove());
   buttons.forEach(btn => {
     const el = document.createElement('button');
@@ -800,8 +1165,6 @@ function openModal(title, bodyHtml, buttons) {
   $('modal-overlay').classList.remove('hidden');
 }
 function closeModal() { $('modal-overlay').classList.add('hidden'); }
-
-
 
 // ── Search ────────────────────────────────────────────────────
 function handleSearch() {
@@ -885,14 +1248,34 @@ function setupMediaSession() {
   navigator.mediaSession.setActionHandler('seekto', e => {
     if (audio.duration) audio.currentTime = e.seekTime;
   });
+  navigator.mediaSession.setActionHandler('seekbackward', null);
+  navigator.mediaSession.setActionHandler('seekforward', null);
 }
+
 function updateMediaSession(track) {
   if (!('mediaSession' in navigator)) return;
+
+  const artUrl = getAlbumArt(track.albumName);
+  const artworkArray = artUrl ? [
+    { src: artUrl, sizes: '512x512', type: 'image/jpeg' },
+    { src: artUrl, sizes: '256x256', type: 'image/jpeg' }
+  ] : [];
+
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: track.albumName || 'SoundVault',
     album: track.albumName || '',
+    artwork: artworkArray
   });
+
+  navigator.mediaSession.setActionHandler('nexttrack', playNext);
+  navigator.mediaSession.setActionHandler('previoustrack', playPrev);
+
+  try {
+    navigator.mediaSession.setActionHandler('seekbackward', null);
+    navigator.mediaSession.setActionHandler('seekforward', null);
+  } catch (e) { }
+
   navigator.mediaSession.playbackState = 'playing';
 }
 
@@ -958,6 +1341,11 @@ async function downloadForOffline(track) {
         console.log('Downloading for offline:', url);
         await cache.add(url);
       }
+    }
+    // Mark as downloaded in state
+    if (!state.downloaded.has(track.path)) {
+      state.downloaded.add(track.path);
+      persist();
     }
   } catch (e) {
     console.warn('Failed to cache for offline:', e);
