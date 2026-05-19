@@ -469,6 +469,43 @@ h2.section-title {
   color: var(--text-muted);
 }
 
+.artist-separator {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 16px 0 8px 12px;
+}
+
+.az-scroll-container {
+  position: sticky;
+  top: 100px;
+  height: calc(100vh - 300px);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  margin-left: 10px;
+  padding-right: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--red);
+  user-select: none;
+  touch-action: none;
+}
+
+.az-char {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  transition: background var(--t), color var(--t);
+}
+
+.az-char:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 /* ── Artist detail hero ────────────────────────────────────── */
 .artist-hero {
   display: flex;
@@ -1860,7 +1897,7 @@ h2.section-title {
         Currently this uses 'env(safe-area-inset-bottom)' which is Apple's default padding to clear the home swipe bar (about ~34px). 
         To move the nav bar closer to the bottom edge, you can multiply it by a decimal like 0.5, or replace it entirely with a fixed pixel value (e.g. padding-bottom: 12px;).
       */
-      padding-bottom: calc(env(safe-area-inset-bottom) * 0.05);
+      padding-bottom: calc(env(safe-area-inset-bottom) * 0.6);
     }
   }
 }
