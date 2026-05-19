@@ -6,6 +6,13 @@ Fetches official album art from MusicBrainz/Cover Art Archive,
 renames tracks to official titles, embeds art into tags,
 and rebuilds library.json.
 
+Now enhanced with sequential search fallbacks:
+1. MusicBrainz (Official exact matching)
+2. Wikipedia Search API (parsing song/single Infoboxes)
+3. DuckDuckGo Search (locating matching Wikipedia pages as Google/DDG fallback)
+
+Leaves the track name/metadata alone if no match is found (only strips YouTube junk).
+
 Usage:
   python3 art_fetch.py                     # all albums
   python3 art_fetch.py --dry-run           # preview only
@@ -16,7 +23,14 @@ Requirements:
   pip3 install mutagen requests
 """
 
-import argparse, json, os, re, sys, time, shutil
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import shutil
+import urllib.parse
 from pathlib import Path
 
 try:
@@ -68,13 +82,45 @@ UA         = "SoundVault/1.0 (https://github.com/vicsanity623/Music)"
 RATE_LIMIT = 1.2   # seconds between MB requests (be polite)
 
 # ── YouTube junk stripper ─────────────────────────────────────────────────────
-YT_JUNK = re.compile(
-    r"[\(\[\{]?\s*(?:official\s*(?:music\s*)?(?:video|audio|clip|hd|4k|lyric[s]?|visualizer)?|"
-    r"music\s*video|lyric[s]?\s*video|official|explicit|dirty|clean\s*version|"
-    r"radio\s*edit|full\s*(?:song|version)|hd|hq|4k|1080p|720p)\s*[\)\]\}]?",
-    re.IGNORECASE,
-)
 TRACK_NUM_RE = re.compile(r"^\d+\s*[-_.]\s*")
+
+def clean_youtube_junk(text):
+    """
+    Strips common YouTube video junk (like lyrics video, Audio Only, visualizer, official audio, etc.)
+    from a track title, keeping only the clean title itself.
+    """
+    t = text.replace("_", " ")
+    t = TRACK_NUM_RE.sub("", t)
+    
+    # Common YouTube video junk terms
+    junk_keywords = [
+        r"official\s+music\s+video", r"official\s+video", r"official\s+audio",
+        r"music\s+video", r"lyric\s+video", r"lyrics\s+video", r"official\s+lyrics\s+video",
+        r"audio\s+only", r"official\s+audio\s+only", r"visualizer", r"explicit", r"clean\s+version",
+        r"dirty\s+version", r"radio\s+edit", r"full\s+song", r"full\s+version", r"video\s+clip",
+        r"official\s+video\s+clip", r"lyrics", r"lyric", r"audio", r"video", r"official",
+        r"hd", r"hq", r"4k", r"1080p", r"720p", r"remastered", r"remaster"
+    ]
+    
+    # 1. Strip brackets/braces/parentheses enclosing any of the junk keywords
+    pattern_brackets = re.compile(
+        r"[\(\[\{]\s*[^)\]}]*(?:" + "|".join(junk_keywords) + r")[^)\]}]*\s*[\)\]\}]",
+        re.IGNORECASE
+    )
+    t = pattern_brackets.sub("", t)
+    
+    # 2. Strip stand-alone junk keywords from anywhere else in the title
+    pattern_standalone = re.compile(
+        r"\b(?:" + "|".join(junk_keywords) + r")\b",
+        re.IGNORECASE
+    )
+    t = pattern_standalone.sub("", t)
+    
+    # Clean up double/excess whitespace and dangling punctuation
+    t = re.sub(r"\s+", " ", t).strip()
+    t = t.strip("-_.,/\\ )}] ({[ &")
+    t = re.sub(r"\s{2,}", " ", t).strip()
+    return t
 
 # ── Rate-limited MusicBrainz GET ──────────────────────────────────────────────
 _last_mb = 0.0
@@ -145,23 +191,23 @@ def parse_filename(stem):
     Parses a filename stem to extract artist and title.
     Returns (cleaned_title, extracted_artist or "")
     """
-    # 1. Strip leading track number prefix like "01 - ", "26 - ", "16 "
-    s = re.sub(r"^\d+\s*[-_.]\s*", "", stem).strip()
-    # Also handle numeric space prefix without dash
+    # Replace underscores with spaces to handle --restrict-filenames
+    s = stem.replace("_", " ").strip()
+
+    # 1. Strip leading track number prefix
+    s = re.sub(r"^\d+\s*[-_.]\s*", "", s).strip()
     s = re.sub(r"^\d+\s+", "", s).strip()
     
     # 2. Strip featured artist suffixes from the filename
     s = re.sub(r"(?i)\s+(?:featuring|feat\.?|ft\.?)\s+.*$", "", s).strip()
     
-    # 3. Strip common YouTube junk terms case-insensitively
-    s = re.sub(r"(?i)[\(\[\{]?\s*(?:lyrics|lyric|audio|video|official|hd|hq|4k|clip|footage)\s*[\)\]\}]?", "", s).strip()
+    # 3. Strip common YouTube junk
+    s = clean_youtube_junk(s)
     
-    # 4. Clean up unmatched brackets/parentheses and double spaces
-    s = s.replace("(", "").replace(")", "").replace("[", "").replace("]", "").replace("{", "").replace("}", "")
+    # Strip helper words
+    s = re.sub(r"(?i)\s+(?:with|by|feat\.?|ft\.?|featuring|and|&)\s*$", "", s).strip()
     s = re.sub(r"\s{2,}", " ", s).strip()
     
-    # 5. Handle dash separators to extract artist and title:
-    # Look for "Artist - Title", "Artist – Title", "Artist — Title"
     artist = ""
     title = s
     
@@ -172,7 +218,6 @@ def parse_filename(stem):
             title = parts[1].strip()
             break
     else:
-        # If no spaced dash, let's look for a simple dash but avoid splits for known terms
         match = re.search(r"\s*-\s*", s)
         if match:
             idx = match.start()
@@ -182,7 +227,6 @@ def parse_filename(stem):
                 artist = left
                 title = right
 
-    # Clean up the extracted artist and title
     if artist:
         artist = clean_artist(artist)
     
@@ -194,9 +238,8 @@ def clean_title(raw, album_hint=""):
     t = raw.replace("_", " ")
     t = TRACK_NUM_RE.sub("", t)
     if " - " in t:
-        # "Artist - Title" → keep after the dash
         t = t.split(" - ", 1)[1]
-    t = YT_JUNK.sub(" ", t)
+    t = clean_youtube_junk(t)
     
     if album_hint:
         t = strip_album_prefix(t, album_hint)
@@ -209,10 +252,7 @@ def clean_title(raw, album_hint=""):
 def clean_artist(artist):
     if not artist:
         return "Unknown Artist"
-    # Remove common YouTube channel suffixes
     a = re.sub(r"(?i)\s*(?:music|vevo|-topic|official|youtube)\s*$", "", artist).strip()
-    
-    # Normalize comparison to handle spelling variations
     norm = re.sub(r'[^a-z0-9]', '', a.lower())
     if norm in ("eminemmusic", "eminem"):
         return "Eminem"
@@ -226,7 +266,6 @@ def normalize_compare(s):
     return re.sub(r'[^a-z0-9]', '', s.lower())
 
 def safe_name(s):
-    # Strip null bytes and replace standard illegal characters
     s = s.replace("\x00", "")
     return re.sub(r'[/\\:*?"<>|]', "_", s).strip()[:120]
 
@@ -272,7 +311,7 @@ def write_metadata(path, title, artist, album):
             if a.tags is None: a.add_tags()
             a.tags["TIT2"] = TIT2(encoding=3, text=title)
             a.tags["TPE1"] = TPE1(encoding=3, text=artist)
-            a.tags["TALB"] = TALB(encoding=3, text=album) # TALB is Album
+            a.tags["TALB"] = TALB(encoding=3, text=album)
             a.save()
         elif path.suffix.lower() == ".flac":
             a = FLAC(path)
@@ -317,9 +356,51 @@ def extract_embedded_art(path):
         pass
     return None
 
+def is_version_mismatch(query, candidate):
+    query_norm = query.lower()
+    candidate_norm = candidate.lower()
+    
+    query_norm = re.sub(r"[^a-z0-9\s]", "", query_norm)
+    candidate_norm = re.sub(r"[^a-z0-9\s]", "", candidate_norm)
+    
+    keywords = ["remix", "acoustic", "live", "instrumental", "dub", "cover", "tribute", "karaoke", "demo", "slowed", "reverb", "sped up"]
+    for kw in keywords:
+        if re.search(r'\b' + re.escape(kw) + r'\b', candidate_norm) and not re.search(r'\b' + re.escape(kw) + r'\b', query_norm):
+            return True
+    return False
+
+def is_exact_match(title1, artist1, title2, artist2):
+    """
+    Enforces that candidate metadata must be an exact, high-quality, and official
+    match to the source title and artist.
+    """
+    t1 = normalize_compare(title1)
+    t2 = normalize_compare(title2)
+    a1 = normalize_compare(artist1) if artist1 else ""
+    a2 = normalize_compare(artist2) if artist2 else ""
+    
+    if not t1 or not t2:
+        return False
+        
+    # Check for direct title equality
+    if t1 == t2:
+        if a1 and a2:
+            return a1 == a2 or a1 in a2 or a2 in a1
+        return True
+        
+    # Allow close substring matches for longer titles to accommodate slight variations
+    if len(t1) > 4 and len(t2) > 4:
+        if t1 in t2 or t2 in t1:
+            if a1 and a2:
+                return a1 == a2 or a1 in a2 or a2 in a1
+            return True
+            
+    return False
+
+# ── Search Engines & Fallbacks ────────────────────────────────────────────────
+
 def search_mb(title, artist="", album_hint=""):
     """Search MusicBrainz. Returns dict or None."""
-    # Clean the title for search by stripping featured artists to avoid search failures
     search_title = re.sub(r"[\(\[\{]?\s*(?:featuring|feat\.?|ft\.?)\s+[^\]\)\}]*[\)\]\}]?", "", title, flags=re.IGNORECASE)
     search_title = re.sub(r"\s+(?:featuring|feat\.?|ft\.?)\s+.*$", "", search_title, flags=re.IGNORECASE)
     search_title = re.sub(r"\s{2,}", " ", search_title).strip()
@@ -330,7 +411,6 @@ def search_mb(title, artist="", album_hint=""):
         clean_art = re.sub(r"\s*(ft\.|feat\.|&).*$", "", clean_art, flags=re.IGNORECASE).strip()
         if clean_art: parts.append(f'artist:"{clean_art}"')
         
-    # Try searching with release query parameter first (highly precise)
     data = None
     if album_hint:
         clean_alb = re.sub(r"[\(\[\{]?\s*(?:expanded|deluxe|remastered|anniversary|special|edition|version|mourner(?:’|')s)\s*[\)\]\}]?", "", album_hint, flags=re.IGNORECASE).strip()
@@ -340,7 +420,6 @@ def search_mb(title, artist="", album_hint=""):
             limit = 5 if artist else 30
             data = mb_get("recording", {"query": " AND ".join(precise_parts), "limit": limit})
             
-    # If precise search returned no results, fallback to searching without release filter
     if not data or not data.get("recordings"):
         limit = 5 if artist else 30
         data = mb_get("recording", {"query": " AND ".join(parts), "limit": limit})
@@ -354,13 +433,14 @@ def search_mb(title, artist="", album_hint=""):
     for rec in data["recordings"]:
         if rec.get("score", 0) < 70:
             continue
+            
+        if is_version_mismatch(title, rec["title"]):
+            continue
         releases = rec.get("releases", [])
 
-        # 1. First, check if there is a release matching the album_hint
         if norm_hint:
             for rel in releases:
                 norm_rel = normalize_compare(rel.get("title", ""))
-                # If perfect match or one contains the other, prefer this release group
                 if norm_rel == norm_hint or (len(norm_rel) > 4 and (norm_rel in norm_hint or norm_hint in norm_rel)):
                     return {
                         "title":   rec["title"],
@@ -370,7 +450,6 @@ def search_mb(title, artist="", album_hint=""):
                         "release_group": rel.get("release-group", {}).get("id"),
                     }
 
-        # 2. Prefer Studio Album releases (exclude Compilations/Live if possible)
         for rel in releases:
             rg = rel.get("release-group", {})
             primary = rg.get("primary-type")
@@ -390,7 +469,6 @@ def search_mb(title, artist="", album_hint=""):
     if best_match:
         return best_match
 
-    # Fallback to the first release that is an Album
     for rec in data["recordings"]:
         if rec.get("score", 0) < 70:
             continue
@@ -405,7 +483,6 @@ def search_mb(title, artist="", album_hint=""):
                     "release_group": rg.get("id"),
                 }
                 
-        # Hard fallback to the absolute first release
         releases = rec.get("releases", [])
         if releases:
             rel = releases[0]
@@ -419,10 +496,209 @@ def search_mb(title, artist="", album_hint=""):
             
     return None
 
+def parse_wikipedia_infobox(wikitext):
+    """
+    Parses wikitext song/single/album/track infobox to extract key fields.
+    """
+    if not wikitext:
+        return None
+    
+    # Try to find a matching infobox template
+    match = re.search(r"\{\{Infobox\s+(song|single|album|music\s+track|track)\b", wikitext, re.IGNORECASE)
+    if not match:
+        return None
+        
+    start_idx = match.start()
+    content = wikitext[start_idx:start_idx+12000]
+    
+    info = {}
+    for line in content.split("\n"):
+        if line.strip() == "}}":
+            break
+        m = re.match(r"^\s*\|\s*([a-zA-Z0-9_\-]+)\s*=\s*(.+)$", line)
+        if m:
+            key = m.group(1).strip().lower()
+            val = m.group(2).strip()
+            
+            # Remove wikitext formatting
+            val = re.sub(r"\[\[([^\|\]]+)\]\]", r"\1", val)
+            val = re.sub(r"\[\[[^\|\]]+\|([^\]]+)\]\]", r"\1", val)
+            val = re.sub(r"<!--.*?-->", "", val)
+            val = re.sub(r"<[^>]+>", "", val)
+            val = re.sub(r"\{\{.*?\}\}", "", val)
+            val = val.strip("-_.,/\\ )}] ({[ &'")
+            info[key] = val
+            
+    return info
+
+def search_wikipedia(title, artist=""):
+    """
+    Search Wikipedia for official metadata.
+    """
+    query_str = f"{artist} {title} song" if artist else f"{title} song"
+    print(f"      Wiki   : Searching Wikipedia for \"{query_str}\"…")
+    
+    url = "https://en.wikipedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "list": "search",
+        "srsearch": query_str,
+        "format": "json",
+        "limit": 3
+    }
+    
+    try:
+        r = requests.get(url, params=params, headers={"User-Agent": UA}, timeout=10)
+        if r.status_code != 200:
+            return None
+        
+        data = r.json()
+        results = data.get("query", {}).get("search", [])
+        if not results:
+            return None
+            
+        for res in results:
+            page_title = res.get("title")
+            raw_url = "https://en.wikipedia.org/w/index.php"
+            r_raw = requests.get(raw_url, params={"title": page_title, "action": "raw"},
+                                 headers={"User-Agent": UA}, timeout=10)
+            if r_raw.status_code != 200 or not r_raw.text:
+                continue
+                
+            info = parse_wikipedia_infobox(r_raw.text)
+            if info:
+                info_name = info.get("name") or page_title
+                info_artist = info.get("artist") or artist or ""
+                info_album = info.get("album") or "Single"
+                
+                info_name = re.sub(r"\s*\([^)]*\)", "", info_name).strip()
+                info_artist = re.sub(r"\s*\([^)]*\)", "", info_artist).strip()
+                info_album = re.sub(r"\s*\([^)]*\)", "", info_album).strip()
+                
+                if is_exact_match(title, artist, info_name, info_artist):
+                    return {
+                        "title": info_name,
+                        "artist": info_artist,
+                        "album": info_album,
+                        "source": "Wikipedia",
+                        "wiki_page": page_title
+                    }
+    except Exception as e:
+        print(f"      Wiki   : Error: {e}")
+    return None
+
+def search_duckduckgo_google(title, artist=""):
+    """
+    Fallback DuckDuckGo Search to locate matching Wikipedia article.
+    """
+    query_str = f"{artist} {title} song wikipedia" if artist else f"{title} song wikipedia"
+    print(f"      DDG    : Searching DDG for \"{query_str}\"…")
+    
+    url = "https://html.duckduckgo.com/html/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    }
+    
+    try:
+        r = requests.get(url, params={"q": query_str}, headers=headers, timeout=10)
+        if r.status_code != 200:
+            return None
+            
+        # Scan DDG response for wikipedia URLs
+        wiki_titles = []
+        matches = re.finditer(r'en\.wikipedia\.org/wiki/([a-zA-Z0-9_\-\%\(\)]+)', r.text)
+        for m in matches:
+            encoded_title = m.group(1)
+            page_title = urllib.parse.unquote(encoded_title).replace("_", " ")
+            page_title = page_title.split("#")[0].split("?")[0]
+            if page_title and page_title not in wiki_titles:
+                wiki_titles.append(page_title)
+                
+        for page_title in wiki_titles[:3]:
+            raw_url = "https://en.wikipedia.org/w/index.php"
+            r_raw = requests.get(raw_url, params={"title": page_title, "action": "raw"},
+                                 headers={"User-Agent": UA}, timeout=10)
+            if r_raw.status_code != 200 or not r_raw.text:
+                continue
+                
+            info = parse_wikipedia_infobox(r_raw.text)
+            if info:
+                info_name = info.get("name") or page_title
+                info_artist = info.get("artist") or artist or ""
+                info_album = info.get("album") or "Single"
+                
+                info_name = re.sub(r"\s*\([^)]*\)", "", info_name).strip()
+                info_artist = re.sub(r"\s*\([^)]*\)", "", info_artist).strip()
+                info_album = re.sub(r"\s*\([^)]*\)", "", info_album).strip()
+                
+                if is_exact_match(title, artist, info_name, info_artist):
+                    return {
+                        "title": info_name,
+                        "artist": info_artist,
+                        "album": info_album,
+                        "source": "DuckDuckGo",
+                        "wiki_page": page_title
+                    }
+    except Exception as e:
+        print(f"      DDG    : Error: {e}")
+    return None
+
+def find_official_match(title, artist="", album_hint=""):
+    """
+    Orchestrates the sequential search pipeline (MusicBrainz -> Wikipedia -> DDG).
+    """
+    # 1. Try MusicBrainz
+    mb = search_mb(title, artist, album_hint)
+    if not mb and " - " in title:
+        parts = title.split(" - ", 1)
+        mb = search_mb(parts[1], parts[0], album_hint)
+    if not mb:
+        mb = search_mb(title, album_hint=album_hint)
+        
+    if mb and is_exact_match(title, artist, mb["title"], mb["artist"]):
+        return {
+            "title": mb["title"],
+            "artist": mb["artist"],
+            "album": mb["album"],
+            "release": mb["release"],
+            "release_group": mb.get("release_group") or mb.get("release-group"),
+            "source": "MusicBrainz"
+        }
+        
+    # 2. Try Wikipedia
+    wiki = search_wikipedia(title, artist)
+    if wiki:
+        # Cross-reference with MB to get cover art release identifier
+        mb_wiki = search_mb(wiki["title"], wiki["artist"], wiki["album"])
+        return {
+            "title": wiki["title"],
+            "artist": wiki["artist"],
+            "album": wiki["album"],
+            "release": mb_wiki["release"] if mb_wiki else None,
+            "release_group": (mb_wiki.get("release_group") or mb_wiki.get("release-group")) if mb_wiki else None,
+            "source": "Wikipedia"
+        }
+        
+    # 3. Try Google/DuckDuckGo
+    ddg = search_duckduckgo_google(title, artist)
+    if ddg:
+        mb_ddg = search_mb(ddg["title"], ddg["artist"], ddg["album"])
+        return {
+            "title": ddg["title"],
+            "artist": ddg["artist"],
+            "album": ddg["album"],
+            "release": mb_ddg["release"] if mb_ddg else None,
+            "release_group": (mb_ddg.get("release_group") or mb_ddg.get("release-group")) if mb_ddg else None,
+            "source": "DuckDuckGo"
+        }
+        
+    return None
+
+# ── Album Processing ──────────────────────────────────────────────────────────
+
 def process_album(album_dir, dry_run=False):
     """
-    Processes files in a directory. If individual tracks are identified as 
-    belonging to different albums, they are moved to proper Artist/Album folders.
+    Processes files in a directory. Renames matching tracks and leaves unmatched tracks alone.
     """
     print(f"\n{'[DRY RUN] ' if dry_run else ''}📂 Scanning: {album_dir.relative_to(ALBUMS_DIR)}")
     audio_files = sorted(f for f in album_dir.iterdir()
@@ -431,11 +707,7 @@ def process_album(album_dir, dry_run=False):
     if not audio_files:
         return None
 
-    # Pass 1: Gather matches and find dominant artist/album
     results = []
-    artist_counts = {}
-    album_counts = {}
-
     album_hint = album_dir.name
     artist_hint = album_dir.parent.name if album_dir.parent != ALBUMS_DIR else ""
 
@@ -443,69 +715,43 @@ def process_album(album_dir, dry_run=False):
         fn_title, fn_artist = parse_filename(f.stem)
         tags = read_tags(f)
         
-        raw_artist = fn_artist or tags["artist"] or artist_hint
+        trustworthy_artist_hint = artist_hint if artist_hint and artist_hint.lower() not in ("albums", "unknown artist", "single", "stems") else ""
+        raw_artist = fn_artist or tags["artist"] or trustworthy_artist_hint
         raw_title = fn_title or tags["title"] or f.stem
         
-        cleaned = clean_title(raw_title, album_hint=album_hint)
+        cleaned = clean_youtube_junk(raw_title)
+        if album_hint:
+            cleaned = strip_album_prefix(cleaned, album_hint)
         if tags.get("album"):
-            cleaned = clean_title(cleaned, album_hint=tags["album"])
+            cleaned = strip_album_prefix(cleaned, tags["album"])
 
-        mb = search_mb(cleaned, raw_artist, album_hint=album_hint)
-        if not mb and " - " in raw_title:
-            filename_artist = raw_title.split(" - ", 1)[0].replace("_", " ").strip()
-            mb = search_mb(cleaned, filename_artist, album_hint=album_hint)
-        if not mb:
-            mb = search_mb(cleaned, album_hint=album_hint)
+        match = find_official_match(cleaned, raw_artist, album_hint=album_hint)
+        results.append((f, cleaned, raw_artist, match))
 
-        if mb:
-            art = clean_artist(mb["artist"])
-            alb = mb["album"]
-            artist_counts[art] = artist_counts.get(art, 0) + 1
-            album_counts[alb] = album_counts.get(alb, 0) + 1
-            results.append((f, cleaned, raw_artist, mb))
-        else:
-            results.append((f, cleaned, raw_artist, None))
-
-    # Determine dominant artist and album in this directory
-    dominant_artist = None
-    dominant_album = None
-    is_cohesive_album = False
-    
-    if album_counts:
-        dominant_album = max(album_counts, key=album_counts.get)
-        dominant_count = album_counts[dominant_album]
-        # Folder is cohesive if at least 40% of matched tracks match dominant album, and at least 2 tracks match (or if it is very small)
-        if dominant_count >= max(2, len(audio_files) * 0.4):
-            is_cohesive_album = True
-            
-    if artist_counts:
-        dominant_artist = max(artist_counts, key=artist_counts.get)
-    elif artist_hint:
-        dominant_artist = clean_artist(artist_hint)
-        
-    if not dominant_album:
-        dominant_album = album_dir.name
-
-    # Pass 2: Process and relocate files
-    for f, cleaned, raw_artist, mb in results:
+    for f, cleaned, raw_artist, match in results:
         print(f"\n  🎵  {f.name}")
         
-        if mb:
-            print(f"      Match  : \"{mb['title']}\" by {mb['artist']} from album \"{mb['album']}\"")
-            final_title = mb['title']
-            final_artist = clean_artist(mb['artist'])
-            final_album = mb['album']
+        if match:
+            print(f"      Match  : \"{match['title']}\" by {match['artist']} from album \"{match['album']}\" (via {match['source']})")
+            final_title = match['title']
+            final_artist = clean_artist(match['artist'])
+            final_album = match['album']
         else:
-            if is_cohesive_album and dominant_artist and dominant_album:
-                print(f"      No match found. Using dominant folder artist/album: \"{dominant_artist}\" - \"{dominant_album}\"")
-                final_title, final_artist, final_album = cleaned, dominant_artist, dominant_album
-            else:
-                artist_val = clean_artist(raw_artist) if raw_artist else "Unknown Artist"
-                print(f"      No match found. Organizing as Single: \"{artist_val}\" - \"{cleaned}\"")
-                final_title, final_artist, final_album = cleaned, artist_val, "Single"
+            # Leave the name alone! Only strip YouTube junk.
+            print(f"      No match found. Leaving name alone (cleaning YouTube junk).")
+            final_title = cleaned
+            final_artist = clean_artist(raw_artist) if raw_artist else (artist_hint or "Unknown Artist")
+            final_album = album_hint
 
-        # 2. Determine Destination
-        # Pattern: Albums/Artist Name/Album Name/
+        # Avoid redundant renaming when possible
+        if album_dir.name and normalize_compare(final_album) == normalize_compare(album_dir.name):
+            final_album = album_dir.name
+            
+        if album_dir.parent != ALBUMS_DIR and album_dir.parent.name:
+            if normalize_compare(final_artist) == normalize_compare(album_dir.parent.name):
+                final_artist = album_dir.parent.name
+
+        # Determine Destination Directory
         dest_dir = ALBUMS_DIR / safe_name(final_artist) / safe_name(final_album)
         
         prefix_m = re.match(r"^(\d+\s*[-_.]\s*)", f.stem)
@@ -514,16 +760,20 @@ def process_album(album_dir, dry_run=False):
         new_path = dest_dir / new_filename
 
         if not dry_run:
+            if not f.exists():
+                print(f"      ⚠ Error: Source file not found: {f}")
+                continue
+
             dest_dir.mkdir(parents=True, exist_ok=True)
             
-            # 3. Fetch/Update Art in the NEW destination
+            # Fetch / embed cover art
             art_path = dest_dir / "cover.jpg"
             art_data = None
-            if not art_path.exists() and mb:
+            if not art_path.exists() and match and match.get("release"):
                 print(f"      Art    : fetching…", end=" ", flush=True)
-                art_data = fetch_caa(mb["release"])
-                if not art_data and mb.get("release_group"):
-                    art_data = fetch_caa_group(mb["release_group"])
+                art_data = fetch_caa(match["release"])
+                if not art_data and match.get("release_group"):
+                    art_data = fetch_caa_group(match["release_group"])
                 
                 if art_data: 
                     art_path.write_bytes(art_data)
@@ -536,14 +786,13 @@ def process_album(album_dir, dry_run=False):
                 except Exception:
                     pass
 
-            # 4. Update Tags & Relocate Audio
+            # Update Metadata Tags
             write_metadata(f, final_title, final_artist, final_album)
             
-            # Embed the cover art directly into the audio file to overwrite YouTube thumbnails!
             if art_data:
                 embed_art(f, art_data)
             
-            # 5. Handle Stems Relocation
+            # Relocate Stems (if any exist from prior stems creation)
             stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
             
             if album_dir.parent == ALBUMS_DIR:
@@ -555,21 +804,60 @@ def process_album(album_dir, dry_run=False):
             new_stems_path = new_stems_root / safe_name(final_title)
 
             if old_stems_path.exists():
-                print(f"      Stems  : Relocating to {new_stems_path.relative_to(STEMS_DIR)}")
-                new_stems_root.mkdir(parents=True, exist_ok=True)
-                if old_stems_path != new_stems_path:
+                is_stems_same = False
+                if new_stems_path.exists():
                     try:
-                        shutil.move(str(old_stems_path), str(new_stems_path))
-                    except Exception as e:
-                        print(f"      ⚠ Stems move failed: {e}")
+                        is_stems_same = os.path.samefile(old_stems_path, new_stems_path)
+                    except Exception:
+                        pass
+                
+                try:
+                    if not is_stems_same:
+                        print(f"      Stems  : Relocating to {new_stems_path.relative_to(STEMS_DIR)}")
+                        new_stems_root.mkdir(parents=True, exist_ok=True)
+                        if old_stems_path != new_stems_path:
+                            shutil.move(str(old_stems_path), str(new_stems_path))
+                    else:
+                        if old_stems_path.name != new_stems_path.name:
+                            print(f"      Stems  : Rename (case change) {old_stems_path.name} → {new_stems_path.name}")
+                            temp_stems = old_stems_path.with_name(old_stems_path.name + ".tmp_rename")
+                            if temp_stems.exists():
+                                shutil.rmtree(temp_stems)
+                            os.rename(old_stems_path, temp_stems)
+                            os.rename(temp_stems, new_stems_path)
+                except Exception as e:
+                    print(f"      ⚠ Stems move failed: {e}")
 
-            # Move audio file last
+            # Relocate audio file last
             if f != new_path:
-                print(f"      Move   : → {new_path.relative_to(ALBUMS_DIR)}")
-                if new_path.exists(): os.remove(new_path) # Overwrite if exact match exists
-                shutil.move(str(f), str(new_path))
+                is_same = False
+                if f.exists() and new_path.exists():
+                    try:
+                        is_same = os.path.samefile(f, new_path)
+                    except Exception:
+                        pass
 
-    # Clean up empty old folder (if it was an unsorted/playlist folder, robust to .DS_Store)
+                try:
+                    if is_same:
+                        if f.name != new_filename:
+                            print(f"      Rename (case change): {f.name} → {new_filename}")
+                            temp_path = f.with_name(f.name + ".tmp_rename")
+                            if temp_path.exists():
+                                os.remove(temp_path)
+                            os.rename(f, temp_path)
+                            os.rename(temp_path, new_path)
+                        else:
+                            print(f"      Move   : Already in place (case-insensitive match)")
+                    else:
+                        print(f"      Move   : → {new_path.relative_to(ALBUMS_DIR)}")
+                        if new_path.exists():
+                            os.remove(new_path)
+                        if f.exists():
+                            shutil.move(str(f), str(new_path))
+                except Exception as e:
+                    print(f"      ⚠ Move failed: {e}")
+
+    # Clean up empty parent directories
     if not dry_run and album_dir != ALBUMS_DIR:
         try:
             children = [c for c in album_dir.iterdir()]
@@ -590,17 +878,17 @@ def process_album(album_dir, dry_run=False):
                         for c in stems_children:
                             if c.is_file(): c.unlink()
                         old_stems_parent.rmdir()
-        except: pass
+        except:
+            pass
 
     return None
 
 # ── Rebuild library.json ──────────────────────────────────────────────────────
+
 def build_index(unused_albums_list=None):
-    """Re-scans the entire Albums directory to build a fresh library.json supporting both flat and nested layouts"""
     print("\n🔍 Rebuilding library index...")
     albums = []
     
-    # Walk through ALL directories containing audio files under ALBUMS_DIR
     audio_dirs = []
     for dirpath, dirnames, filenames in os.walk(str(ALBUMS_DIR)):
         dirnames[:] = [d for d in dirnames if not d.startswith('.')]
@@ -612,15 +900,12 @@ def build_index(unused_albums_list=None):
         tracks = []
         cover_path = album_dir / "cover.jpg"
         
-        # Determine Artist & Album name from directory structure
         if album_dir.parent == ALBUMS_DIR:
-            # Flat layout: Albums/AlbumName/
             album_name = album_dir.name
             artist_name = ""
             display_name = album_name
             stems_root_dir = STEMS_DIR / (album_dir.name + "STEMS")
         elif album_dir.parent.parent == ALBUMS_DIR:
-            # Nested layout: Albums/ArtistName/AlbumName/
             album_name = album_dir.name
             artist_name = album_dir.parent.name
             display_name = f"{artist_name} - {album_name}"
@@ -634,7 +919,6 @@ def build_index(unused_albums_list=None):
         for f in sorted(album_dir.iterdir()):
             if f.suffix.lower() not in AUDIO_EXTS: continue
             
-            # Find stems
             stem_key = re.sub(r"^\d+\s*[-_.]\s*", "", f.stem)
             stems_dir = stems_root_dir / stem_key
             stems = {}
@@ -667,7 +951,6 @@ def build_index(unused_albums_list=None):
     print(f"✅ library.json updated with {len(albums)} albums.")
 
 def cleanup_empty_dirs(root_dir):
-    """Recursively deletes empty directories (handling macOS hidden files like .DS_Store) inside root_dir"""
     if not root_dir.exists(): return
     for dirpath, dirnames, filenames in os.walk(str(root_dir), topdown=False):
         path = Path(dirpath)
@@ -684,7 +967,6 @@ def cleanup_empty_dirs(root_dir):
             pass
 
 def cleanup_orphaned_dirs(albums_dir, stems_dir):
-    """Deletes legacy directories that no longer contain any audio files (cleaning left-over cover.jpg files)"""
     if albums_dir.exists():
         audio_folders = set()
         for dirpath, dirnames, filenames in os.walk(str(albums_dir)):
@@ -705,7 +987,8 @@ def cleanup_orphaned_dirs(albums_dir, stems_dir):
                         if f.is_file(): f.unlink()
                     path.rmdir()
                     print(f"      Cleaned legacy folder containing no audio: {path.relative_to(albums_dir)}")
-                except: pass
+                except:
+                    pass
 
     if stems_dir.exists():
         stems_folders = set()
@@ -727,9 +1010,11 @@ def cleanup_orphaned_dirs(albums_dir, stems_dir):
                         if f.is_file(): f.unlink()
                     path.rmdir()
                     print(f"      Cleaned legacy stems folder containing no stems: {path.relative_to(stems_dir)}")
-                except: pass
+                except:
+                    pass
 
 # ── Entry point ───────────────────────────────────────────────────────────────
+
 def main():
     ap = argparse.ArgumentParser(description="SoundVault art fetcher + renamer")
     ap.add_argument("--dry-run",  action="store_true", help="Preview, no file changes")
@@ -743,11 +1028,10 @@ def main():
 
     load_all_albums()
 
-    print(f"🎵  SoundVault Art Fetcher")
+    print(f"🎵  SoundVault Art Fetcher & Organiser")
     print(f"    root : {MUSIC_ROOT}")
     print(f"    mode : {'DRY RUN — no files modified' if args.dry_run else 'LIVE'}")
 
-    # Find all directories that contain audio files recursively under ALBUMS_DIR
     dirs = []
     for dirpath, dirnames, filenames in os.walk(str(ALBUMS_DIR)):
         dirnames[:] = [d for d in dirnames if not d.startswith('.')]
@@ -759,12 +1043,11 @@ def main():
     if args.album:
         dirs = [d for d in dirs if args.album.lower() in d.name.lower()]
         if not dirs:
-            sys.exit(f"No album matching: {args.album}")
+            sys.exit(f"No album directory matching: {args.album}")
 
-    results = []
     for d in dirs:
         if d.exists():
-            results.append(process_album(d, dry_run=args.dry_run))
+            process_album(d, dry_run=args.dry_run)
 
     if not args.no_index and not args.dry_run:
         build_index()
