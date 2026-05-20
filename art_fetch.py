@@ -39,14 +39,17 @@ except ImportError:
     sys.exit("Missing: pip3 install requests")
 
 try:
+    # pyrefly: ignore [missing-import]
     from mutagen.mp3 import MP3
+    # pyrefly: ignore [missing-import]
     from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB
+    # pyrefly: ignore [missing-import]
     from mutagen.flac import FLAC, Picture
 except ImportError:
     sys.exit("Missing: pip3 install mutagen")
 
 # ── Config ────────────────────────────────────────────────────────────────────
-MUSIC_ROOT = Path("/Volumes/XTRA/PYOB2026MAY/MusicLibrary")
+MUSIC_ROOT = Path(os.getenv("MUSIC_ROOT", "/Volumes/XTRA/PYOB2026MAY/MusicLibrary"))
 ALBUMS_DIR = MUSIC_ROOT / "Albums"
 STEMS_DIR  = MUSIC_ROOT / "STEMS"
 INDEX_FILE = MUSIC_ROOT / "library.json"
@@ -145,6 +148,11 @@ def mb_get(endpoint, params):
 
 def strip_album_prefix(title, album):
     if not album: return title
+    
+    # Do not strip if the title IS the album name
+    if normalize_compare(title) == normalize_compare(album):
+        return title
+        
     norm_album = "".join(c.lower() for c in album if c.isalnum())
     if not norm_album: return title
     
@@ -163,7 +171,13 @@ def strip_album_prefix(title, album):
             
         orig_start = indices[match_idx]
         orig_end = indices[match_idx + len(norm_album) - 1]
-        title = title[:orig_start] + title[orig_end + 1:]
+        
+        candidate = title[:orig_start] + title[orig_end + 1:]
+        # Ensure we don't completely erase the title
+        if not "".join(c for c in candidate if c.isalnum()):
+            break
+            
+        title = candidate
         
     return re.sub(r"\s+", " ", title).strip("-_.,/\\ )}] ({[ ")
 
@@ -606,7 +620,7 @@ def search_duckduckgo_google(title, artist=""):
             
         # Scan DDG response for wikipedia URLs
         wiki_titles = []
-        matches = re.finditer(r'en\.wikipedia\.org/wiki/([a-zA-Z0-9_\-\%\(\)]+)', r.text)
+        matches = re.finditer(r'en\.wikipedia\.org/wiki/([a-zA-Z0-9_\-\%\(\)\.,\']+)', r.text)
         for m in matches:
             encoded_title = m.group(1)
             page_title = urllib.parse.unquote(encoded_title).replace("_", " ")
@@ -651,39 +665,257 @@ def fetch_artist_image(artist_name):
         return None
         
     url = "https://en.wikipedia.org/w/api.php"
-    search_params = {
-        "action": "query",
-        "list": "search",
-        "srsearch": f"{artist_name} musician OR band",
-        "format": "json",
-        "limit": 1
-    }
-    try:
-        r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
-        if r.status_code != 200:
-            return None
+    
+    # Helper to check if title matches the query name
+    def is_matching_artist(title, target_name, resolved_target=None):
+        import re
+        if "(disambiguation)" in title.lower():
+            return False
             
-        data = r.json()
-        results = data.get("query", {}).get("search", [])
-        if not results:
-            return None
-        page_title = results[0]["title"]
+        def clean(s):
+            s = s.lower()
+            s = re.sub(r"[^\w\s]", "", s)
+            return " ".join(s.split())
+            
+        normalized_target = clean(target_name)
+        normalized_resolved = clean(resolved_target) if resolved_target else None
+        if not normalized_target:
+            return False
+            
+        match = re.match(r"^([^(]+)(?:\(([^)]+)\))?$", title)
+        if not match:
+            return False
+            
+        main_title = match.group(1).strip()
+        disambig = match.group(2).strip().lower() if match.group(2) else None
         
+        normalized_main = clean(main_title)
+        
+        if normalized_main != normalized_target and (
+            not normalized_resolved or normalized_main != normalized_resolved
+        ):
+            return False
+            
+        # If there's a disambiguation, verify it is music/entertainment related
+        if disambig:
+            music_keywords = {
+                "musician", "singer", "rapper", "band", "duo", "trio", "group", "music", "musical", 
+                "producer", "composer", "songwriter", "dj", "artist", "performer", "vocalist",
+                "hip hop", "rock", "pop", "metal", "ensemble", "pianist", "guitarist"
+            }
+            if any(kw in disambig for kw in music_keywords):
+                return True
+            return False
+            
+        return True
+
+    # Helper to perform Wikipedia search and find a matching title
+    def search_wikipedia(query_name):
+        # Resolve redirect first
+        resolved_target = None
+        resolve_params = {
+            "action": "query",
+            "titles": query_name,
+            "redirects": 1,
+            "format": "json"
+        }
+        try:
+            r = requests.get(url, params=resolve_params, headers={"User-Agent": UA}, timeout=10)
+            if r.status_code == 200:
+                pages = r.json().get("query", {}).get("pages", {})
+                for pid, p in pages.items():
+                    if int(pid) > 0:
+                        resolved_target = p.get("title")
+        except Exception:
+            pass
+
+        search_params = {
+            "action": "query",
+            "list": "search",
+            "srsearch": f"{query_name} music",
+            "format": "json",
+            "limit": 3
+        }
+        try:
+            r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
+            if r.status_code != 200:
+                return None, None
+            data = r.json()
+            results = data.get("query", {}).get("search", [])
+            
+            if not results:
+                # Fallback: try just the exact name
+                search_params["srsearch"] = query_name
+                r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
+                results = r.json().get("query", {}).get("search", [])
+                
+            if not results:
+                return None, None
+                
+            # Find the best title that is a verified match
+            for res in results:
+                title = res["title"]
+                if is_matching_artist(title, query_name, resolved_target):
+                    return title, results
+            
+        except Exception:
+            pass
+        return None, None
+
+    # Step 1: Search for full artist name
+    best_title, results = search_wikipedia(artist_name)
+    
+    # Step 2: If no match and artist name contains separators, try main artist
+    main_artist = None
+    if not best_title:
+        main_artist = artist_name
+        has_separator = False
+        for separator in (" feat.", " feat ", " ft.", " ft ", " featuring ", " & ", " and ", " vs.", " vs "):
+            if separator in f" {main_artist.lower()} ":
+                idx = f" {main_artist.lower()} ".find(separator)
+                main_artist = main_artist[:idx].strip()
+                has_separator = True
+                break
+        
+        if has_separator and main_artist:
+            best_title, results = search_wikipedia(main_artist)
+            
+    if not best_title or not results:
+        spotify_img = fetch_spotify_artist_image(artist_name)
+        if spotify_img:
+            return spotify_img
+        if main_artist and main_artist != artist_name:
+            spotify_img_main = fetch_spotify_artist_image(main_artist)
+            if spotify_img_main:
+                return spotify_img_main
+        return None
+        
+    try:
+        # Step 3: Fetch the image for the best title
         img_params = {
             "action": "query",
             "prop": "pageimages",
-            "titles": page_title,
+            "titles": best_title,
             "pithumbsize": 800,
+            "redirects": 1,
             "format": "json"
         }
+        
         r_img = requests.get(url, params=img_params, headers={"User-Agent": UA}, timeout=10)
         img_data = r_img.json()
         pages = img_data.get("query", {}).get("pages", {})
+        
         for page_id, page_info in pages.items():
             if "thumbnail" in page_info:
                 return page_info["thumbnail"]["source"]
+                
+        # Step 4: If the best title had no image, fallback to other top results that also match
+        for res in results:
+            if res["title"] == best_title:
+                continue
+            # Make sure this fallback also matches our query!
+            if not is_matching_artist(res["title"], artist_name) and not (
+                main_artist and is_matching_artist(res["title"], main_artist)
+            ):
+                continue
+                
+            img_params["titles"] = res["title"]
+            r_img = requests.get(url, params=img_params, headers={"User-Agent": UA}, timeout=10)
+            pages = r_img.json().get("query", {}).get("pages", {})
+            for page_id, page_info in pages.items():
+                if "thumbnail" in page_info:
+                    return page_info["thumbnail"]["source"]
+
     except Exception as e:
         print(f"      Artist : Error fetching image: {e}")
+        
+    # Fallback to MusicBrainz/Spotify if Wikipedia failed to find an image
+    spotify_img = fetch_spotify_artist_image(artist_name)
+    if spotify_img:
+        return spotify_img
+        
+    if main_artist and main_artist != artist_name:
+        spotify_img_main = fetch_spotify_artist_image(main_artist)
+        if spotify_img_main:
+            return spotify_img_main
+        
+    return None
+
+def fetch_spotify_artist_image(artist_name):
+    """
+    Fallback method: Search MusicBrainz to find the artist's Spotify URL,
+    fetch the Spotify profile page, and extract the official headshot image.
+    """
+    print(f"      DEBUG: fetch_spotify_artist_image called for '{artist_name}'")
+    if not artist_name or artist_name.lower() in ("unknown artist", "various artists"):
+        print("      DEBUG: Invalid artist name")
+        return None
+
+    search_url = "https://musicbrainz.org/ws/2/artist"
+    params = {
+        "query": f'artist:"{artist_name}"',
+        "fmt": "json"
+    }
+    try:
+        r = requests.get(search_url, params=params, headers={"User-Agent": UA}, timeout=10)
+        print(f"      DEBUG: MB Search status={r.status_code}")
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        artists = data.get("artists", [])
+        if not artists:
+            print("      DEBUG: No artists found in MB Search")
+            return None
+        
+        best_artist = artists[0]
+        print(f"      DEBUG: Best MB artist='{best_artist.get('name')}', score={best_artist.get('score')}")
+        if best_artist.get("score", 0) < 80:
+            return None
+            
+        artist_id = best_artist.get("id")
+        if not artist_id:
+            return None
+            
+        rel_url = f"https://musicbrainz.org/ws/2/artist/{artist_id}"
+        r_rel = requests.get(rel_url, params={"inc": "url-rels", "fmt": "json"}, headers={"User-Agent": UA}, timeout=10)
+        print(f"      DEBUG: MB Rel status={r_rel.status_code}")
+        if r_rel.status_code != 200:
+            return None
+            
+        rel_data = r_rel.json()
+        spotify_url = None
+        for rel in rel_data.get("relations", []):
+            url_dict = rel.get("url", {})
+            resource = url_dict.get("resource", "")
+            if "open.spotify.com/artist/" in resource:
+                spotify_url = resource
+                break
+                
+        print(f"      DEBUG: spotify_url='{spotify_url}'")
+        if not spotify_url:
+            return None
+            
+        r_spot = requests.get(spotify_url, headers={"User-Agent": UA}, timeout=10)
+        print(f"      DEBUG: Spotify status={r_spot.status_code}")
+        if r_spot.status_code != 200:
+            return None
+            
+        html = r_spot.text
+        
+        match = re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']', html)
+        if match:
+            print(f"      DEBUG: og:image found='{match.group(1)}'")
+            return match.group(1)
+            
+        match = re.search(r'<meta\s+name=["\']twitter:image["\']\s+content=["\']([^"\']+)["\']', html)
+        if match:
+            print(f"      DEBUG: twitter:image found='{match.group(1)}'")
+            return match.group(1)
+            
+        print("      DEBUG: No image tags found on Spotify page")
+    except Exception as e:
+        print(f"      Artist Spotify Fetch Error: {e}")
+        
     return None
 
 def find_official_match(title, artist="", album_hint=""):
@@ -795,7 +1027,36 @@ def process_album(album_dir, dry_run=False):
                 final_artist = album_dir.parent.name
 
         # Determine Destination Directory
-        dest_dir = ALBUMS_DIR / safe_name(final_artist) / safe_name(final_album)
+        artist_dir_name = safe_name(final_artist)
+        if ALBUMS_DIR.exists():
+            for d in ALBUMS_DIR.iterdir():
+                if d.is_dir() and not d.name.startswith('.') and normalize_compare(d.name) == normalize_compare(final_artist):
+                    artist_dir_name = d.name
+                    break
+        
+        artist_dir = ALBUMS_DIR / artist_dir_name
+        
+        album_dir_name = safe_name(final_album)
+        if artist_dir.exists():
+            norm_new = normalize_compare(final_album)
+            core_new = normalize_compare(re.sub(r"[\(\[\{]?\s*(?:expanded|deluxe|remastered|anniversary|special|edition|version|tour|bonus)\b.*[\)\]\}]?", "", final_album, flags=re.IGNORECASE))
+            
+            for d in artist_dir.iterdir():
+                if d.is_dir() and not d.name.startswith('.'):
+                    norm_existing = normalize_compare(d.name)
+                    core_existing = normalize_compare(re.sub(r"[\(\[\{]?\s*(?:expanded|deluxe|remastered|anniversary|special|edition|version|tour|bonus)\b.*[\)\]\}]?", "", d.name, flags=re.IGNORECASE))
+                    
+                    if norm_existing == norm_new:
+                        album_dir_name = d.name
+                        break
+                    elif core_existing and core_new and core_existing == core_new:
+                        album_dir_name = d.name
+                        break
+                    elif len(norm_existing) > 10 and len(norm_new) > 10 and (norm_existing in norm_new or norm_new in norm_existing):
+                        album_dir_name = d.name
+                        break
+        
+        dest_dir = artist_dir / album_dir_name
         
         prefix_m = re.match(r"^(\d+\s*[-_.]\s*)", f.stem)
         prefix = prefix_m.group(1) if prefix_m else ""
