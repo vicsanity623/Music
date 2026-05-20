@@ -1016,15 +1016,30 @@ h2.section-title {
 }
 
 #player-bar.fullscreen .player-track {
-  flex-direction: column;
-  text-align: center;
-  margin-bottom: 40px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "art art"
+    "info info"
+    "like add";
+  justify-items: center;
+  align-items: center;
+  gap: 12px 0;
+  margin-bottom: 30px;
 }
 
 #player-bar.fullscreen .player-art {
+  grid-area: art;
   width: min(80vw, 320px);
   height: min(80vw, 320px);
   margin-bottom: 24px;
+}
+
+#player-bar.fullscreen .player-info {
+  grid-area: info;
+  text-align: center;
+  margin-bottom: 8px;
 }
 
 #player-bar.fullscreen .player-title {
@@ -1037,6 +1052,18 @@ h2.section-title {
   font-size: 1rem;
 }
 
+#player-bar.fullscreen .player-like {
+  grid-area: like;
+  justify-self: end;
+  margin-right: 20px;
+}
+
+#player-bar.fullscreen .player-add {
+  grid-area: add;
+  justify-self: start;
+  margin-left: 20px;
+}
+
 #player-bar.fullscreen .player-controls {
   width: 100%;
   max-width: 400px;
@@ -1045,6 +1072,65 @@ h2.section-title {
 
 #player-bar.fullscreen .player-right {
   justify-content: center;
+}
+
+/* Premium Landscape Fullscreen Optimization */
+@media (orientation: landscape) {
+  #player-bar.fullscreen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr auto;
+    grid-template-areas:
+      "track controls"
+      "track right";
+    align-items: center;
+    gap: 12px 40px;
+    padding: calc(20px + env(safe-area-inset-top)) calc(40px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(40px + env(safe-area-inset-left));
+  }
+
+  #player-bar.fullscreen .player-track {
+    grid-area: track;
+    margin-bottom: 0;
+    gap: 8px 0;
+  }
+
+  #player-bar.fullscreen .player-art {
+    width: min(48vh, 220px);
+    height: min(48vh, 220px);
+    margin-bottom: 8px;
+  }
+
+  #player-bar.fullscreen .player-title {
+    font-size: 1.2rem;
+    margin-bottom: 2px;
+  }
+
+  #player-bar.fullscreen .player-album {
+    font-size: 0.85rem;
+  }
+
+  #player-bar.fullscreen .player-like {
+    margin-right: 12px;
+  }
+
+  #player-bar.fullscreen .player-add {
+    margin-left: 12px;
+  }
+
+  #player-bar.fullscreen .player-controls {
+    grid-area: controls;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  #player-bar.fullscreen .player-right {
+    grid-area: right;
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    justify-content: space-between;
+  }
 }
 
 /* Track info */
