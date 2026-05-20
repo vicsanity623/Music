@@ -39,8 +39,11 @@ except ImportError:
     sys.exit("Missing: pip3 install requests")
 
 try:
+    # pyrefly: ignore [missing-import]
     from mutagen.mp3 import MP3
+    # pyrefly: ignore [missing-import]
     from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB
+    # pyrefly: ignore [missing-import]
     from mutagen.flac import FLAC, Picture
 except ImportError:
     sys.exit("Missing: pip3 install mutagen")
@@ -663,49 +666,125 @@ def fetch_artist_image(artist_name):
         
     url = "https://en.wikipedia.org/w/api.php"
     
-    # 1. Search for the artist with the word "music" to bias towards musical artists
-    search_params = {
-        "action": "query",
-        "list": "search",
-        "srsearch": f"{artist_name} music",
-        "format": "json",
-        "limit": 3
-    }
-    
-    try:
-        r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
-        if r.status_code != 200:
-            return None
+    # Helper to check if title matches the query name
+    def is_matching_artist(title, target_name, resolved_target=None):
+        import re
+        if "(disambiguation)" in title.lower():
+            return False
             
-        data = r.json()
-        results = data.get("query", {}).get("search", [])
+        def clean(s):
+            s = s.lower()
+            s = re.sub(r"[^\w\s]", "", s)
+            return " ".join(s.split())
+            
+        normalized_target = clean(target_name)
+        normalized_resolved = clean(resolved_target) if resolved_target else None
+        if not normalized_target:
+            return False
+            
+        match = re.match(r"^([^(]+)(?:\(([^)]+)\))?$", title)
+        if not match:
+            return False
+            
+        main_title = match.group(1).strip()
+        disambig = match.group(2).strip().lower() if match.group(2) else None
         
-        if not results:
-            # Fallback: try just the exact artist name
-            search_params["srsearch"] = artist_name
+        normalized_main = clean(main_title)
+        
+        if normalized_main != normalized_target and (
+            not normalized_resolved or normalized_main != normalized_resolved
+        ):
+            return False
+            
+        # If there's a disambiguation, verify it is music/entertainment related
+        if disambig:
+            music_keywords = {
+                "musician", "singer", "rapper", "band", "duo", "trio", "group", "music", "musical", 
+                "producer", "composer", "songwriter", "dj", "artist", "performer", "vocalist",
+                "hip hop", "rock", "pop", "metal", "ensemble", "pianist", "guitarist"
+            }
+            if any(kw in disambig for kw in music_keywords):
+                return True
+            return False
+            
+        return True
+
+    # Helper to perform Wikipedia search and find a matching title
+    def search_wikipedia(query_name):
+        # Resolve redirect first
+        resolved_target = None
+        resolve_params = {
+            "action": "query",
+            "titles": query_name,
+            "redirects": 1,
+            "format": "json"
+        }
+        try:
+            r = requests.get(url, params=resolve_params, headers={"User-Agent": UA}, timeout=10)
+            if r.status_code == 200:
+                pages = r.json().get("query", {}).get("pages", {})
+                for pid, p in pages.items():
+                    if int(pid) > 0:
+                        resolved_target = p.get("title")
+        except Exception:
+            pass
+
+        search_params = {
+            "action": "query",
+            "list": "search",
+            "srsearch": f"{query_name} music",
+            "format": "json",
+            "limit": 3
+        }
+        try:
             r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
-            results = r.json().get("query", {}).get("search", [])
+            if r.status_code != 200:
+                return None, None
+            data = r.json()
+            results = data.get("query", {}).get("search", [])
             
-        if not results:
-            return None
+            if not results:
+                # Fallback: try just the exact name
+                search_params["srsearch"] = query_name
+                r = requests.get(url, params=search_params, headers={"User-Agent": UA}, timeout=10)
+                results = r.json().get("query", {}).get("search", [])
+                
+            if not results:
+                return None, None
+                
+            # Find the best title that is a verified match
+            for res in results:
+                title = res["title"]
+                if is_matching_artist(title, query_name, resolved_target):
+                    return title, results
             
-        # 2. Pick the best title from the top 3 results
-        # We prefer a title that exactly matches the artist name (case-insensitive)
-        # or matches common disambiguation patterns.
-        best_title = results[0]["title"]
-        artist_lower = artist_name.lower()
-        
-        for res in results:
-            title_lower = res["title"].lower()
-            if title_lower == artist_lower or \
-               title_lower == f"{artist_lower} (band)" or \
-               title_lower == f"{artist_lower} (musician)" or \
-               title_lower == f"{artist_lower} (rapper)" or \
-               title_lower == f"{artist_lower} (singer)":
-                best_title = res["title"]
+        except Exception:
+            pass
+        return None, None
+
+    # Step 1: Search for full artist name
+    best_title, results = search_wikipedia(artist_name)
+    
+    # Step 2: If no match and artist name contains separators, try main artist
+    main_artist = None
+    if not best_title:
+        main_artist = artist_name
+        has_separator = False
+        for separator in (" feat.", " feat ", " ft.", " ft ", " featuring ", " & ", " and ", " vs.", " vs "):
+            if separator in f" {main_artist.lower()} ":
+                idx = f" {main_artist.lower()} ".find(separator)
+                main_artist = main_artist[:idx].strip()
+                has_separator = True
                 break
         
-        # 3. Fetch the image for the best title (adding redirects=1 to follow stage names)
+        if has_separator and main_artist:
+            best_title, results = search_wikipedia(main_artist)
+            
+    if not best_title or not results:
+        return None
+        
+    try:
+        # Step 3: Fetch the image for the best title
         img_params = {
             "action": "query",
             "prop": "pageimages",
@@ -723,10 +802,16 @@ def fetch_artist_image(artist_name):
             if "thumbnail" in page_info:
                 return page_info["thumbnail"]["source"]
                 
-        # 4. If the best title had no image, fallback to checking the other top results
+        # Step 4: If the best title had no image, fallback to other top results that also match
         for res in results:
             if res["title"] == best_title:
                 continue
+            # Make sure this fallback also matches our query!
+            if not is_matching_artist(res["title"], artist_name) and not (
+                main_artist and is_matching_artist(res["title"], main_artist)
+            ):
+                continue
+                
             img_params["titles"] = res["title"]
             r_img = requests.get(url, params=img_params, headers={"User-Agent": UA}, timeout=10)
             pages = r_img.json().get("query", {}).get("pages", {})
