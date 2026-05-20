@@ -1,10 +1,10 @@
 // ============================================================
-//  SoundVault — Service Worker  v5.6
+//  SoundVault — Service Worker  v5.7
 // ============================================================
 
-const CACHE_NAME = 'soundvault-v5.6';
+const CACHE_NAME = 'soundvault-v5.7';
 const STATIC_ASSETS = ['./', './index.html', './style.css', './main.js', './manifest.json'];
-const AUDIO_CACHE = 'soundvault-audio-v5.6';
+const AUDIO_CACHE = 'soundvault-audio-v5.7';
 const MAX_AUDIO_CACHE_MB = 4096; // 4 GB limit for audio cache
 
 // ── Install ───────────────────────────────────────────────────
@@ -84,22 +84,57 @@ async function networkFirst(request) {
 }
 
 async function handleAudio(request) {
-  // Check audio cache first
-  const cached = await caches.match(request);
-  if (cached) return cached;
+  const cache = await caches.open(AUDIO_CACHE);
+  // Match ignoring search query parameters for maximum reliability
+  const cachedResponse = await cache.match(request, { ignoreSearch: true });
+
+  if (cachedResponse) {
+    const rangeHeader = request.headers.get('range');
+    if (!rangeHeader) {
+      return cachedResponse;
+    }
+
+    try {
+      const arrayBuffer = await cachedResponse.arrayBuffer();
+      const match = rangeHeader.match(/^bytes=(\d+)-(\d+)?$/);
+      if (!match) {
+        return cachedResponse;
+      }
+
+      const start = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : arrayBuffer.byteLength - 1;
+
+      // Ensure boundaries are safe
+      const safeStart = Math.max(0, Math.min(start, arrayBuffer.byteLength - 1));
+      const safeEnd = Math.max(safeStart, Math.min(end, arrayBuffer.byteLength - 1));
+
+      const slicedBuffer = arrayBuffer.slice(safeStart, safeEnd + 1);
+
+      const responseHeaders = new Headers(cachedResponse.headers);
+      responseHeaders.set('Content-Range', `bytes ${safeStart}-${safeEnd}/${arrayBuffer.byteLength}`);
+      responseHeaders.set('Content-Length', slicedBuffer.byteLength.toString());
+      responseHeaders.set('Accept-Ranges', 'bytes');
+
+      return new Response(slicedBuffer, {
+        status: 206,
+        statusText: 'Partial Content',
+        headers: responseHeaders
+      });
+    } catch (err) {
+      console.warn('[SW] Failed to slice range from cached audio, falling back to network:', err);
+    }
+  }
 
   try {
-    // For range requests we cannot cache directly, just proxy
-    if (request.headers.has('range')) {
-      return fetch(request);
-    }
     const response = await fetch(request);
-    if (response.ok && response.status === 200) {
-      const cache = await caches.open(AUDIO_CACHE);
-      cache.put(request, response.clone());
+    // If it's a standard GET (no range, status 200), we can cache it
+    if (response.ok && response.status === 200 && !request.headers.has('range')) {
+      const cacheToPut = await caches.open(AUDIO_CACHE);
+      cacheToPut.put(request, response.clone());
     }
     return response;
-  } catch {
+  } catch (err) {
+    console.error('[SW] Network error fetching audio:', err);
     return new Response('Audio unavailable offline', { status: 503 });
   }
 }
