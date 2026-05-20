@@ -229,7 +229,7 @@ body {
 #main-content {
   grid-area: main;
   overflow-y: auto;
-  padding: calc(24px + env(safe-area-inset-top)) 10px calc(55px + env(safe-area-inset-bottom));
+  padding: calc(32px + env(safe-area-inset-top)) 40px calc(100px + env(safe-area-inset-bottom));
   position: relative;
 }
 
@@ -981,7 +981,7 @@ h2.section-title {
   grid-template-columns: 1fr 2fr 1fr;
   align-items: center;
   gap: 8px;
-  padding: 0 8px env(safe-area-inset-bottom);
+  padding: 0 20px env(safe-area-inset-bottom);
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(20px);
@@ -1001,7 +1001,7 @@ h2.section-title {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: calc(20px + env(safe-area-inset-top)) 10px calc(40px + env(safe-area-inset-bottom));
+  padding: calc(40px + env(safe-area-inset-top)) 40px calc(40px + env(safe-area-inset-bottom));
   background: rgba(10, 10, 15, 0.95);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
@@ -1832,7 +1832,7 @@ h2.section-title {
   }
 
   #main-content {
-    padding: calc(10px + env(safe-area-inset-top)) 16px 0;
+    padding: calc(20px + env(safe-area-inset-top)) 16px 0;
     overflow-y: auto;
   }
 
@@ -1900,7 +1900,92 @@ h2.section-title {
         Currently this uses 'env(safe-area-inset-bottom)' which is Apple's default padding to clear the home swipe bar (about ~34px). 
         To move the nav bar closer to the bottom edge, you can multiply it by a decimal like 0.5, or replace it entirely with a fixed pixel value (e.g. padding-bottom: 12px;).
       */
-      padding-bottom: calc(env(safe-area-inset-bottom) * 0.01);
+      padding-bottom: calc(env(safe-area-inset-bottom) * 0.6);
     }
   }
+}
+
+/* ── Swipe to delete styles ────────────────────────────────── */
+.track-list li, .songs-track-list li {
+  position: relative !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  display: block !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  background: transparent !important;
+}
+
+.swipe-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  z-index: 1;
+  background: linear-gradient(90deg, #ff3b30, #ff2d55);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 20px;
+  box-sizing: border-box;
+  font-weight: 600;
+  font-size: 0.85rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.swipe-bg svg {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  fill: currentColor;
+}
+
+.swipe-content {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.2s ease, background 0.15s ease;
+  position: relative;
+  z-index: 2;
+  background: transparent;
+}
+
+/* Hover/active backgrounds on the swipe-content wrapper */
+.track-list li:hover .swipe-content, 
+.songs-track-list li:hover .swipe-content {
+  background: var(--bg-hover);
+}
+
+.track-list li.active .swipe-content {
+  background: var(--bg-active);
+  color: var(--red);
+}
+
+.track-list .swipe-content {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+}
+
+.songs-track-list .swipe-content {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+
+#ctx-rename {
+  color: var(--text-primary);
+}
+#ctx-rename:hover {
+  background: var(--bg-hover);
+  color: var(--red);
 }
