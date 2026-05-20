@@ -1992,3 +1992,156 @@ h2.section-title {
   background: var(--bg-hover);
   color: var(--red);
 }
+
+/* ── Active song wave animation ──────────────────────────────── */
+.songs-list-item.active {
+  background: var(--bg-active);
+  color: var(--red);
+}
+
+.songs-list-item.active .track-title {
+  color: var(--red);
+}
+
+/* Hide the cover art/icon when active */
+.songs-list-item.active .song-thumb-art,
+.songs-list-item.active .song-thumb-icon {
+  display: none !important;
+}
+
+/* Show and center the playing wave indicator inside the thumbnail box */
+.songs-list-item.active .song-thumb .playing-indicator {
+  display: flex !important;
+}
+
+/* ── Stacked Album Covers for Playlists ─────────────────────── */
+.playlist-stacked-art {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-active);
+  border-radius: inherit;
+}
+
+.playlist-stacked-art .stacked-cover {
+  position: absolute;
+  width: 68%;
+  height: 68%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-hi);
+  transition: transform var(--t);
+}
+
+/* Rotation fan-out for 2 stacked covers */
+.playlist-stacked-art.stack-2 .stacked-cover:nth-child(1) {
+  transform: translate(-10%, -5%) rotate(-8deg);
+  z-index: 1;
+  opacity: 0.85;
+}
+
+.playlist-stacked-art.stack-2 .stacked-cover:nth-child(2) {
+  transform: translate(10%, 5%) rotate(6deg);
+  z-index: 2;
+}
+
+/* Rotation fan-out for 3 stacked covers */
+.playlist-stacked-art.stack-3 .stacked-cover:nth-child(1) {
+  transform: translate(-20%, -10%) rotate(-12deg);
+  z-index: 1;
+  opacity: 0.75;
+}
+
+.playlist-stacked-art.stack-3 .stacked-cover:nth-child(2) {
+  transform: translate(0%, -5%) rotate(4deg);
+  z-index: 2;
+  opacity: 0.9;
+}
+
+.playlist-stacked-art.stack-3 .stacked-cover:nth-child(3) {
+  transform: translate(20%, 10%) rotate(8deg);
+  z-index: 3;
+}
+
+/* ── Fullscreen Player optimizations ────────────────────────── */
+#player-bar.fullscreen .player-album {
+  width: 100%;
+  max-width: min(85vw, 360px);
+  margin: 0 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  text-overflow: clip;
+}
+
+#player-bar.fullscreen .player-album span {
+  display: inline-block;
+  transition: transform 0.5s ease;
+}
+
+#player-bar.fullscreen .player-album.marquee span {
+  animation: player-marquee 10s linear infinite;
+}
+
+@keyframes player-marquee {
+  0%, 15% {
+    transform: translate3d(0, 0, 0);
+  }
+  50%, 65% {
+    transform: translate3d(var(--scroll-dist, 0px), 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+#player-bar.fullscreen .progress-track {
+  height: 6px;
+}
+
+/* Invisible touch padding overlay to make dragging easier on fingers */
+.progress-track::after {
+  content: '';
+  position: absolute;
+  top: -15px;
+  bottom: -15px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+
+#player-bar.fullscreen .progress-thumb {
+  transform: translate(-50%, -50%) scale(1.2);
+  opacity: 1;
+  pointer-events: none;
+}
+
+#player-bar.fullscreen .ctrl-btn {
+  width: 44px;
+  height: 44px;
+}
+
+#player-bar.fullscreen .ctrl-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+#player-bar.fullscreen .ctrl-play {
+  width: 56px;
+  height: 56px;
+}
+
+#player-bar.fullscreen .ctrl-play svg {
+  width: 26px;
+  height: 26px;
+}
+
+#player-bar.fullscreen .player-top-controls {
+  gap: 28px;
+}
