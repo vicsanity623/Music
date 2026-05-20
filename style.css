@@ -667,7 +667,9 @@ h2.section-title {
 }
 
 #search-input,
-#artists-search-input {
+#artists-search-input,
+#songs-search-input,
+#downloaded-search-input {
   width: 100%;
   padding: 14px 20px 14px 46px;
   background: var(--bg-surface);
@@ -681,13 +683,17 @@ h2.section-title {
 }
 
 #search-input:focus,
-#artists-search-input:focus {
+#artists-search-input:focus,
+#songs-search-input:focus,
+#downloaded-search-input:focus {
   border-color: var(--red-dim);
   box-shadow: 0 0 0 3px var(--red-glow);
 }
 
 #search-input::placeholder,
-#artists-search-input::placeholder {
+#artists-search-input::placeholder,
+#songs-search-input::placeholder,
+#downloaded-search-input::placeholder {
   color: var(--text-muted);
 }
 
