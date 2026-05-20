@@ -13,6 +13,7 @@ const LIBRARY_URL = `${BASE_URL}/library.json`;
 // ── State ─────────────────────────────────────────────────────
 const state = {
   library: null,   // { albums: [...] }
+  rawLibrary: null, // unfiltered original copy from server
   queue: [],     // [{title, album, path, stems, format}]
   queueIndex: -1,
   shuffle: false,
@@ -22,6 +23,8 @@ const state = {
   playlists: [],     // [{id, name, tracks:[...]}]
   liked: new Set(),
   downloaded: new Set(), // paths cached for offline
+  deletedSongs: new Set(), // local deleted song paths
+  renamedSongs: {},       // local custom titles: path -> newTitle
   view: 'home',
   albumView: null,   // current album name in detail view
   artistView: null,  // current artist name in detail view
@@ -66,6 +69,10 @@ function loadPersistedData() {
     if (liked) state.liked = new Set(JSON.parse(liked));
     const dl = localStorage.getItem('sv_downloaded');
     if (dl) state.downloaded = new Set(JSON.parse(dl));
+    const deleted = localStorage.getItem('sv_deleted_songs');
+    if (deleted) state.deletedSongs = new Set(JSON.parse(deleted));
+    const renamed = localStorage.getItem('sv_renamed_songs');
+    if (renamed) state.renamedSongs = JSON.parse(renamed);
   } catch (e) { console.warn('Persistence load error', e); }
 }
 
@@ -74,6 +81,8 @@ function persist() {
     localStorage.setItem('sv_playlists', JSON.stringify(state.playlists));
     localStorage.setItem('sv_liked', JSON.stringify([...state.liked]));
     localStorage.setItem('sv_downloaded', JSON.stringify([...state.downloaded]));
+    localStorage.setItem('sv_deleted_songs', JSON.stringify([...state.deletedSongs]));
+    localStorage.setItem('sv_renamed_songs', JSON.stringify(state.renamedSongs));
   } catch (e) { }
 }
 
@@ -87,9 +96,11 @@ async function loadLibrary() {
   try {
     const res = await fetch(LIBRARY_URL, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    state.library = await res.json();
+    state.rawLibrary = await res.json();
+    filterLocalLibrary();
   } catch (e) {
     console.error('Failed to load library.json', e);
+    state.rawLibrary = { albums: [] };
     state.library = { albums: [] };
     showToast('Could not load library. Is the server running?', 'warn');
   } finally {
@@ -337,21 +348,27 @@ function renderSongsIntoList(ul, tracks) {
     const isDownloaded = state.downloaded.has(track.path);
     const addBtnColor = isDownloaded ? 'var(--red)' : 'var(--text-muted)';
     li.innerHTML = `
-      <div class="song-thumb" style="${artUrl ? 'background:#111118;' : 'background:var(--bg-active);'}">
-        ${artUrl
-        ? `<img src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
-        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
-      }
+      <div class="swipe-bg">
+        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        Delete from Device
       </div>
-      <div class="song-info">
-        <p class="track-title">${escHtml(track.title)}</p>
-        <p class="player-album">${escHtml(track.albumName || '')}</p>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="track-format">${track.format || 'MP3'}</span>
-        <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
+      <div class="swipe-content">
+        <div class="song-thumb" style="${artUrl ? 'background:#111118;' : 'background:var(--bg-active);'}">
+          ${artUrl
+          ? `<img src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
+          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
+        }
+        </div>
+        <div class="song-info">
+          <p class="track-title">${escHtml(getTrackTitle(track))}</p>
+          <p class="player-album">${escHtml(track.albumName || '')}</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="track-format">${track.format || 'MP3'}</span>
+          <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
       </div>
     `;
     li.addEventListener('click', () => {
@@ -367,6 +384,8 @@ function renderSongsIntoList(ul, tracks) {
       e.preventDefault();
       openContextMenu(e, track, null);
     });
+    initSwipeToDelete(li, track);
+    initLongPress(li, () => openRenameModal(track));
     ul.appendChild(li);
   });
 }
@@ -462,21 +481,27 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
     const isDownloaded = state.downloaded.has(track.path);
     const addBtnColor = isDownloaded ? 'var(--red)' : 'var(--text-muted)';
     li.innerHTML = `
-      <div class="track-num">
-        <span class="track-num-wrap">${i + 1}</span>
-        <div class="playing-indicator">
-          <span></span><span></span><span></span>
+      <div class="swipe-bg">
+        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        Delete from Device
+      </div>
+      <div class="swipe-content">
+        <div class="track-num">
+          <span class="track-num-wrap">${i + 1}</span>
+          <div class="playing-indicator">
+            <span></span><span></span><span></span>
+          </div>
         </div>
-      </div>
-      <div class="track-info">
-        <p class="track-title">${escHtml(track.title)}</p>
-        ${albumName === null && track.albumName ? `<p class="player-album" style="font-size:0.78rem;color:var(--text-muted);">${escHtml(track.albumName)}</p>` : ''}
-      </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <span class="track-format">${track.format || 'MP3'}</span>
-        <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
+        <div class="track-info">
+          <p class="track-title">${escHtml(getTrackTitle(track))}</p>
+          ${albumName === null && track.albumName ? `<p class="player-album" style="font-size:0.78rem;color:var(--text-muted);">${escHtml(track.albumName)}</p>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="track-format">${track.format || 'MP3'}</span>
+          <button class="track-add-btn" style="background:none;border:none;color:${addBtnColor};cursor:pointer;padding:4px;" title="Add to Playlist">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
       </div>
     `;
     li.addEventListener('click', () => playTrackFromContext(tracks, i, albumName || track.albumName));
@@ -488,6 +513,8 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
       e.preventDefault();
       openContextMenu(e, track, playlistId);
     });
+    initSwipeToDelete(li, track);
+    initLongPress(li, () => openRenameModal(track));
     ul.appendChild(li);
   });
 }
@@ -539,7 +566,7 @@ function loadAndPlay(track) {
 
 function updatePlayerUI(track) {
   $('player-bar').classList.remove('hidden');
-  $('player-title').textContent = track.title || '—';
+  $('player-title').textContent = getTrackTitle(track) || '—';
   $('player-album').textContent = track.albumName || '—';
   $('icon-play').classList.add('hidden');
   $('icon-pause').classList.remove('hidden');
@@ -916,6 +943,10 @@ function setupEventListeners() {
     }
     hideContextMenu();
   });
+  $('ctx-rename').addEventListener('click', () => {
+    if (state.ctxTrack) openRenameModal(state.ctxTrack);
+    hideContextMenu();
+  });
 
   // Hide context menu on outside click
   document.addEventListener('click', e => {
@@ -960,7 +991,7 @@ function renderQueuePanel() {
     li.innerHTML = `
       <span class="q-num">${i + 1}</span>
       <div>
-        <div class="q-title">${escHtml(track.title)}</div>
+        <div class="q-title">${escHtml(getTrackTitle(track))}</div>
         <div class="q-album">${escHtml(track.albumName || '')}</div>
       </div>
     `;
@@ -1179,7 +1210,8 @@ function handleSearch() {
   state.library.albums.forEach(album => {
     if (album.name.toLowerCase().includes(q)) matchedAlbums.push(album);
     album.tracks.forEach(t => {
-      if (t.title.toLowerCase().includes(q)) matchedTracks.push({ ...t, albumName: album.name });
+      const displayTitle = getTrackTitle(t);
+      if (displayTitle.toLowerCase().includes(q)) matchedTracks.push({ ...t, albumName: album.name });
     });
   });
 
@@ -1202,16 +1234,22 @@ function handleSearch() {
     matchedTracks.forEach((track, i) => {
       const li = document.createElement('li');
       li.innerHTML = `
-        <span class="track-num">${i + 1}</span>
-        <div class="track-info">
-          <p class="track-title">${escHtml(track.title)}</p>
-          <p class="player-album">${escHtml(track.albumName)}</p>
+        <div class="swipe-bg">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          Delete from Device
         </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <span class="track-format">${track.format || 'MP3'}</span>
-          <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;" title="Add to Playlist">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
+        <div class="swipe-content">
+          <span class="track-num">${i + 1}</span>
+          <div class="track-info">
+            <p class="track-title">${escHtml(getTrackTitle(track))}</p>
+            <p class="player-album">${escHtml(track.albumName)}</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="track-format">${track.format || 'MP3'}</span>
+            <button class="track-add-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;" title="Add to Playlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
         </div>
       `;
       li.addEventListener('click', () => {
@@ -1227,6 +1265,8 @@ function handleSearch() {
         e.preventDefault();
         openContextMenu(e, track, null);
       });
+      initSwipeToDelete(li, track);
+      initLongPress(li, () => openRenameModal(track));
       ul.appendChild(li);
     });
     section.appendChild(ul);
@@ -1262,7 +1302,7 @@ function updateMediaSession(track) {
   ] : [];
 
   navigator.mediaSession.metadata = new MediaMetadata({
-    title: track.title,
+    title: getTrackTitle(track),
     artist: track.albumName || 'SoundVault',
     album: track.albumName || '',
     artwork: artworkArray
@@ -1350,4 +1390,236 @@ async function downloadForOffline(track) {
   } catch (e) {
     console.warn('Failed to cache for offline:', e);
   }
+}
+
+// ── Helper functions for Swipe & Rename ──────────────────────
+function getTrackTitle(track) {
+  if (!track) return '';
+  return state.renamedSongs[track.path] || track.title || '';
+}
+
+function filterLocalLibrary() {
+  if (!state.rawLibrary) return;
+  // Clone rawLibrary to library
+  state.library = JSON.parse(JSON.stringify(state.rawLibrary));
+  if (state.library && state.library.albums) {
+    state.library.albums.forEach(album => {
+      album.tracks = album.tracks.filter(t => !state.deletedSongs.has(t.path));
+    });
+    state.library.albums = state.library.albums.filter(album => album.tracks.length > 0);
+  }
+}
+
+async function deleteFromCache(track) {
+  if (!('caches' in window)) return;
+  const urls = [`${BASE_URL}/${track.path}`];
+  if (track.stems) {
+    for (const stem in track.stems) {
+      urls.push(`${BASE_URL}/${track.stems[stem]}`);
+    }
+  }
+  for (const cacheName of ['soundvault-audio-v1', 'soundvault-audio-v4.0']) {
+    try {
+      const cache = await caches.open(cacheName);
+      for (const url of urls) {
+        await cache.delete(url);
+      }
+    } catch (e) {
+      console.warn(`Failed to delete from cache ${cacheName}:`, e);
+    }
+  }
+}
+
+async function deleteSongFromDevice(track) {
+  // 1. Add to local set of deleted tracks
+  state.deletedSongs.add(track.path);
+  
+  // 2. Remove from downloaded set if it's there
+  state.downloaded.delete(track.path);
+  
+  // 3. Delete from Cache API
+  await deleteFromCache(track);
+  
+  // 4. Save to localStorage
+  persist();
+  
+  // 5. If currently playing this track, stop or play next
+  if (state.currentTrack && state.currentTrack.path === track.path) {
+    if (state.queue.length > 1) {
+      playNext();
+    } else {
+      audio.pause();
+      state.currentTrack = null;
+      state.isPlaying = false;
+      $('player-bar').classList.add('hidden');
+    }
+  }
+
+  // 6. Remove from any local playlists
+  state.playlists.forEach(pl => {
+    pl.tracks = pl.tracks.filter(t => t.path !== track.path);
+  });
+  persist();
+
+  // 7. Show toast
+  showToast(`"${getTrackTitle(track)}" removed from device`);
+
+  // 8. Apply filter & Re-render
+  filterLocalLibrary();
+  renderAll();
+  
+  // Refresh detail subviews
+  if (state.librarySubView === 'albums' && state.albumView) {
+    const album = state.library?.albums.find(a => a.name === state.albumView);
+    if (album) openAlbumDetail(album);
+  } else if (state.librarySubView === 'artist-detail' && state.artistView) {
+    const map = getArtistsMap();
+    const data = map.get(state.artistView);
+    if (data) {
+      openArtistDetail(state.artistView, data.tracks, data.artistArt);
+    } else {
+      showLibrarySubView('artists');
+    }
+  } else if (state.librarySubView === 'songs') {
+    renderAllSongs();
+  } else if (state.librarySubView === 'downloaded') {
+    renderDownloadedSongs();
+  } else if (state.view === 'playlists' && state.playlistView) {
+    const pl = state.playlists.find(p => p.id === state.playlistView);
+    if (pl) openPlaylistDetail(pl);
+  }
+}
+
+function initSwipeToDelete(li, track) {
+  let startX = 0;
+  let startY = 0;
+  let currentX = 0;
+  let isSwiping = false;
+  const content = li.querySelector('.swipe-content');
+  const bg = li.querySelector('.swipe-bg');
+  if (!content || !bg) return;
+
+  li.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    content.style.transition = 'none';
+    bg.style.transition = 'none';
+    isSwiping = false;
+  }, { passive: true });
+
+  li.addEventListener('touchmove', e => {
+    const diffX = e.touches[0].clientX - startX;
+    const diffY = e.touches[0].clientY - startY;
+
+    if (!isSwiping) {
+      if (Math.abs(diffX) > Math.abs(diffY) && diffX > 8) {
+        isSwiping = true;
+      }
+    }
+
+    if (isSwiping) {
+      if (diffX > 0) {
+        if (e.cancelable) e.preventDefault();
+        content.style.transform = `translateX(${diffX}px)`;
+        bg.style.opacity = Math.min(1, diffX / 80);
+        currentX = diffX;
+      } else {
+        content.style.transform = 'translateX(0px)';
+        bg.style.opacity = '0';
+        currentX = 0;
+      }
+    }
+  }, { passive: false });
+
+  li.addEventListener('touchend', () => {
+    content.style.transition = 'transform 0.2s ease';
+    bg.style.transition = 'opacity 0.2s ease';
+
+    if (isSwiping && currentX > 120) {
+      content.style.transform = `translateX(${li.offsetWidth}px)`;
+      bg.style.opacity = '1';
+      setTimeout(() => {
+        deleteSongFromDevice(track);
+      }, 200);
+    } else {
+      content.style.transform = 'translateX(0px)';
+      bg.style.opacity = '0';
+    }
+    isSwiping = false;
+    currentX = 0;
+  });
+}
+
+function initLongPress(element, callback) {
+  let pressTimer;
+  
+  const start = (e) => {
+    if (e.type === 'click' && e.button !== 0) return;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      callback();
+    }, 600);
+  };
+  
+  const cancel = () => {
+    clearTimeout(pressTimer);
+  };
+  
+  element.addEventListener('touchstart', start, { passive: true });
+  element.addEventListener('touchend', cancel, { passive: true });
+  element.addEventListener('touchmove', cancel, { passive: true });
+  
+  element.addEventListener('mousedown', start);
+  element.addEventListener('mouseup', cancel);
+  element.addEventListener('mouseleave', cancel);
+}
+
+function openRenameModal(track) {
+  const currentTitle = getTrackTitle(track);
+  openModal('Rename Song', `
+    <input type="text" id="rename-song-input" value="${escHtml(currentTitle)}" placeholder="Song title…" maxlength="120" style="width:100%;margin-bottom:12px;background:var(--bg-active);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);padding:8px 12px;box-sizing:border-box;" />
+  `, [
+    {
+      label: 'Rename', cls: 'btn-gold', action: () => {
+        const newTitle = $('rename-song-input').value.trim();
+        if (newTitle) {
+          state.renamedSongs[track.path] = newTitle;
+          persist();
+          showToast('Song renamed');
+          closeModal();
+          
+          // Apply changes to rendering
+          renderAll();
+          
+          if (state.librarySubView === 'albums' && state.albumView) {
+            const album = state.library?.albums.find(a => a.name === state.albumView);
+            if (album) openAlbumDetail(album);
+          } else if (state.librarySubView === 'artist-detail' && state.artistView) {
+            const map = getArtistsMap();
+            const data = map.get(state.artistView);
+            if (data) openArtistDetail(state.artistView, data.tracks, data.artistArt);
+          } else if (state.librarySubView === 'songs') {
+            renderAllSongs();
+          } else if (state.librarySubView === 'downloaded') {
+            renderDownloadedSongs();
+          } else if (state.view === 'playlists' && state.playlistView) {
+            const pl = state.playlists.find(p => p.id === state.playlistView);
+            if (pl) openPlaylistDetail(pl);
+          }
+          
+          if (state.currentTrack && state.currentTrack.path === track.path) {
+            updatePlayerUI(state.currentTrack);
+            updateMediaSession(state.currentTrack);
+          }
+        }
+      }
+    }
+  ]);
+  setTimeout(() => {
+    const input = $('rename-song-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }, 100);
 }
