@@ -42,7 +42,28 @@ const audio = document.getElementById('audio-engine');
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
 
-// ── Init ──────────────────────────────────────────────────────
+
+// -- Marquee text scroll for fullscreen player ------------------
+function updateMarquee() {
+  const el = $('player-album');
+  if (!el) return;
+  const span = el.querySelector('span');
+  if (!span) return;
+  const isFullscreen = $('player-bar')?.classList.contains('fullscreen');
+  if (!isFullscreen) {
+    el.classList.remove('marquee');
+    return;
+  }
+  const overflow = span.scrollWidth - el.clientWidth;
+  if (overflow > 4) {
+    el.style.setProperty('--scroll-dist', `-${overflow + 8}px`);
+    el.classList.add('marquee');
+  } else {
+    el.classList.remove('marquee');
+  }
+}
+
+// -- Init -------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
   loadPersistedData();
   registerSW();
@@ -52,6 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadLibrary();
   renderAll();
 });
+
 
 // ── Service Worker ────────────────────────────────────────────
 function registerSW() {
@@ -303,7 +325,7 @@ function openArtistDetail(artist, tracks, artistArt) {
 }
 
 // ── Songs sub-view ────────────────────────────────────────────
-function renderAllSongs() {
+function renderAllSongs(filterText = '') {
   const ul = $('all-songs-list');
   if (!ul) return;
   ul.innerHTML = '';
@@ -313,11 +335,16 @@ function renderAllSongs() {
     album.tracks.forEach(t => allTracks.push({ ...t, albumName: album.name }));
   });
   allTracks.sort((a, b) => a.title.localeCompare(b.title));
-  renderSongsIntoList(ul, allTracks);
+  const q = filterText.toLowerCase().trim();
+  const filtered = q ? allTracks.filter(t =>
+    (t.title || '').toLowerCase().includes(q) ||
+    (t.albumName || '').toLowerCase().includes(q)
+  ) : allTracks;
+  renderSongsIntoList(ul, filtered);
 }
 
 // ── Downloaded sub-view ───────────────────────────────────────
-function renderDownloadedSongs() {
+function renderDownloadedSongs(filterText = '') {
   const ul = $('downloaded-songs-list');
   if (!ul) return;
   ul.innerHTML = '';
@@ -331,19 +358,28 @@ function renderDownloadedSongs() {
     });
   });
   const actions = $('downloaded-actions');
-  if (!allTracks.length) {
-    ul.innerHTML = `<p class="loading-msg" style="padding:40px 20px;">No downloaded songs yet.<br><small style="opacity:.6">Songs are saved when you play them.</small></p>`;
-    if (actions) actions.classList.add('hidden');
+  const q = filterText.toLowerCase().trim();
+  const filtered = q ? allTracks.filter(t =>
+    (t.title || '').toLowerCase().includes(q) ||
+    (t.albumName || '').toLowerCase().includes(q)
+  ) : allTracks;
+  if (!filtered.length) {
+    ul.innerHTML = q
+      ? `<p class="loading-msg" style="padding:40px 20px;">No results for "${escHtml(filterText)}".</p>`
+      : `<p class="loading-msg" style="padding:40px 20px;">No downloaded songs yet.<br><small style="opacity:.6">Songs are saved when you play them.</small></p>`;
+    if (actions && !q) actions.classList.add('hidden');
     return;
   }
   if (actions) actions.classList.remove('hidden');
-  renderSongsIntoList(ul, allTracks);
+  renderSongsIntoList(ul, filtered);
 }
 
 function renderSongsIntoList(ul, tracks) {
   tracks.forEach((track, i) => {
     const li = document.createElement('li');
-    li.className = 'songs-list-item';
+    const isActive = state.currentTrack && state.currentTrack.path === track.path;
+    li.className = 'songs-list-item' + (isActive ? ' active' : '');
+    li.dataset.path = track.path;
     const artUrl = getAlbumArt(track.albumName);
     const isDownloaded = state.downloaded.has(track.path);
     const addBtnColor = isDownloaded ? 'var(--red)' : 'var(--text-muted)';
@@ -353,11 +389,14 @@ function renderSongsIntoList(ul, tracks) {
         Delete from Device
       </div>
       <div class="swipe-content">
-        <div class="song-thumb" style="${artUrl ? 'background:#111118;' : 'background:var(--bg-active);'}">
+        <div class="song-thumb" style="position:relative;${artUrl ? 'background:#111118;' : 'background:var(--bg-active);'}">
           ${artUrl
-          ? `<img src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
-          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
+          ? `<img class="song-thumb-art" src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
+          : `<svg class="song-thumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
         }
+          <div class="playing-indicator" style="position:absolute;inset:0;margin:auto;width:fit-content;height:fit-content;">
+            <span></span><span></span><span></span>
+          </div>
         </div>
         <div class="song-info">
           <p class="track-title">${escHtml(getTrackTitle(track))}</p>
@@ -475,6 +514,7 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
     li.dataset.index = i;
     li.dataset.album = albumName || '';
     li.dataset.playlistId = playlistId || '';
+    li.dataset.path = track.path;
 
     const isActive = state.currentTrack && state.currentTrack.path === track.path;
     li.className = isActive ? 'active' : '';
@@ -567,7 +607,12 @@ function loadAndPlay(track) {
 function updatePlayerUI(track) {
   $('player-bar').classList.remove('hidden');
   $('player-title').textContent = getTrackTitle(track) || '—';
-  $('player-album').textContent = track.albumName || '—';
+  // Wrap album name in span for marquee animation
+  const albumEl = $('player-album');
+  albumEl.innerHTML = `<span>${escHtml(track.albumName || '—')}</span>`;
+  albumEl.classList.remove('marquee');
+  setTimeout(() => updateMarquee(), 80);
+
   $('icon-play').classList.add('hidden');
   $('icon-pause').classList.remove('hidden');
 
@@ -584,20 +629,35 @@ function updatePlayerUI(track) {
 }
 
 function updateTrackListHighlight() {
+  // Clear old highlights for both track-list rows and songs-list items
   $$('.track-list li').forEach(li => li.classList.remove('active'));
+  $$('.songs-list-item').forEach(li => li.classList.remove('active'));
   if (!state.currentTrack) return;
-  $$('.track-list li').forEach(li => {
+  const activePath = state.currentTrack.path;
+  // Highlight track-list rows by matching data-path
+  $$('.track-list li[data-path]').forEach(li => {
+    if (li.dataset.path === activePath) li.classList.add('active');
+  });
+  // Fallback: match by queue index within same context (for rows without data-path)
+  $$('.track-list li:not([data-path])').forEach(li => {
     const idx = parseInt(li.dataset.index);
-    const track = state.queue[state.queueIndex];
-    if (track && state.queue[idx]?.path === track.path) {
+    const album = li.dataset.album;
+    const plId = li.dataset.playlistId;
+    // Only highlight if the album/playlist context matches
+    const track = state.queue[idx];
+    if (track && track.path === activePath) {
       li.classList.add('active');
     }
+  });
+  // Highlight songs-list items by path
+  $$('.songs-list-item[data-path]').forEach(li => {
+    if (li.dataset.path === activePath) li.classList.add('active');
   });
 }
 
 // ── Playback events ───────────────────────────────────────────
 audio.addEventListener('timeupdate', () => {
-  if (!audio.duration) return;
+  if (!audio.duration || isScrubbing) return;
   const pct = (audio.currentTime / audio.duration) * 100;
   $('progress-bar').style.width = pct + '%';
   $('progress-thumb').style.left = pct + '%';
@@ -633,20 +693,40 @@ function setPlayPauseIcon(playing) {
 
 // ── Progress bar scrubbing ────────────────────────────────────
 let isScrubbing = false;
+let scrubPct = 0;
 const progressTrack = $('progress-track');
 
-function scrubTo(e) {
+function scrubMove(clientX) {
   const rect = progressTrack.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  if (audio.duration) audio.currentTime = pct * audio.duration;
+  scrubPct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const pctStr = (scrubPct * 100) + '%';
+  $('progress-bar').style.width = pctStr;
+  $('progress-thumb').style.left = pctStr;
+  if (audio.duration) {
+    $('time-current').textContent = formatTime(scrubPct * audio.duration);
+  }
 }
 
-progressTrack.addEventListener('mousedown', e => { isScrubbing = true; scrubTo(e); });
-document.addEventListener('mousemove', e => { if (isScrubbing) scrubTo(e); });
-document.addEventListener('mouseup', () => { isScrubbing = false; });
-progressTrack.addEventListener('touchstart', e => { isScrubbing = true; scrubTo(e.touches[0]); }, { passive: true });
-document.addEventListener('touchmove', e => { if (isScrubbing) scrubTo(e.touches[0]); }, { passive: true });
-document.addEventListener('touchend', () => { isScrubbing = false; });
+function scrubCommit() {
+  if (!isScrubbing) return;
+  isScrubbing = false;
+  if (audio.duration) audio.currentTime = scrubPct * audio.duration;
+}
+
+progressTrack.addEventListener('mousedown', e => { isScrubbing = true; scrubMove(e.clientX); });
+document.addEventListener('mousemove', e => { if (isScrubbing) scrubMove(e.clientX); });
+document.addEventListener('mouseup', scrubCommit);
+progressTrack.addEventListener('touchstart', e => {
+  isScrubbing = true;
+  scrubMove(e.touches[0].clientX);
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (isScrubbing) {
+    e.preventDefault();
+    scrubMove(e.touches[0].clientX);
+  }
+}, { passive: false });
+document.addEventListener('touchend', scrubCommit);
 
 // ── Keyboard shortcuts ────────────────────────────────────────
 document.addEventListener('keydown', e => {
@@ -684,12 +764,18 @@ function setupEventListeners() {
         renderLibraryAlbums();
         showLibrarySubView('albums');
       } else if (cat === 'artists') {
+        const input = $('artists-search-input');
+        if (input) input.value = '';
         renderArtistsList();
         showLibrarySubView('artists');
       } else if (cat === 'songs') {
+        const input = $('songs-search-input');
+        if (input) input.value = '';
         renderAllSongs();
         showLibrarySubView('songs');
       } else if (cat === 'downloaded') {
+        const input = $('downloaded-search-input');
+        if (input) input.value = '';
         renderDownloadedSongs();
         showLibrarySubView('downloaded');
       } else if (cat === 'playlists') {
@@ -716,6 +802,7 @@ function setupEventListeners() {
     if (data && data.tracks.length) {
       state.queue = [...data.tracks];
       state.queueIndex = 0;
+      setShuffleMode(false);
       playCurrentQueueItem();
     }
   });
@@ -727,6 +814,7 @@ function setupEventListeners() {
       state.queue = [...data.tracks];
       shuffleArray(state.queue);
       state.queueIndex = 0;
+      setShuffleMode(true);
       playCurrentQueueItem();
     }
   });
@@ -741,6 +829,7 @@ function setupEventListeners() {
     allTracks.sort((a, b) => a.title.localeCompare(b.title));
     state.queue = allTracks;
     state.queueIndex = 0;
+    setShuffleMode(false);
     playCurrentQueueItem();
   });
   $('btn-shuffle-all-songs')?.addEventListener('click', () => {
@@ -752,6 +841,7 @@ function setupEventListeners() {
     shuffleArray(allTracks);
     state.queue = allTracks;
     state.queueIndex = 0;
+    setShuffleMode(true);
     playCurrentQueueItem();
   });
 
@@ -769,6 +859,7 @@ function setupEventListeners() {
     if (!allTracks.length) return;
     state.queue = allTracks;
     state.queueIndex = 0;
+    setShuffleMode(false);
     playCurrentQueueItem();
   });
   $('btn-shuffle-downloaded')?.addEventListener('click', () => {
@@ -785,6 +876,7 @@ function setupEventListeners() {
     shuffleArray(allTracks);
     state.queue = allTracks;
     state.queueIndex = 0;
+    setShuffleMode(true);
     playCurrentQueueItem();
   });
 
@@ -822,12 +914,16 @@ function setupEventListeners() {
   // Album detail play all / shuffle
   $('btn-play-album').addEventListener('click', () => {
     const album = state.library?.albums.find(a => a.name === state.albumView);
-    if (album) playAlbum(album);
+    if (album) {
+      setShuffleMode(false);
+      playAlbum(album);
+    }
   });
   $('btn-shuffle-album').addEventListener('click', () => {
     const album = state.library?.albums.find(a => a.name === state.albumView);
-    if (album) playAlbum(album, true);
+    if (album) { setShuffleMode(true); playAlbum(album, true); }
   });
+  $('btn-play-album').removeEventListener('click', null);
   $('btn-add-album-to-playlist').addEventListener('click', () => {
     const album = state.library?.albums.find(a => a.name === state.albumView);
     if (album) openAddToPlaylistModal(album.tracks.map(t => ({ ...t, albumName: album.name })));
@@ -853,11 +949,11 @@ function setupEventListeners() {
   // Playlist play / shuffle / delete
   $('btn-play-playlist').addEventListener('click', () => {
     const pl = state.playlists.find(p => p.id === state.playlistView);
-    if (pl) playPlaylist(pl);
+    if (pl) { setShuffleMode(false); playPlaylist(pl); }
   });
   $('btn-shuffle-playlist').addEventListener('click', () => {
     const pl = state.playlists.find(p => p.id === state.playlistView);
-    if (pl) playPlaylist(pl, true);
+    if (pl) { setShuffleMode(true); playPlaylist(pl, true); }
   });
   $('btn-delete-playlist').addEventListener('click', () => {
     if (!state.playlistView) return;
@@ -891,7 +987,18 @@ function setupEventListeners() {
 
   $('player-art')?.addEventListener('click', () => {
     $('player-bar').classList.toggle('fullscreen');
+    setTimeout(() => updateMarquee(), 250);
   });
+
+  // Search inputs for Songs and Downloaded views
+  $('songs-search-input')?.addEventListener('input', e => {
+    renderAllSongs(e.target.value);
+  });
+  $('downloaded-search-input')?.addEventListener('input', e => {
+    renderDownloadedSongs(e.target.value);
+  });
+
+  window.addEventListener('resize', updateMarquee);
 
   // Queue panel
   $('btn-queue').addEventListener('click', () => {
@@ -1070,8 +1177,9 @@ function renderMobilePlaylists() {
   ul.innerHTML = '';
   state.playlists.forEach(pl => {
     const li = document.createElement('li');
+    const iconHtml = buildPlaylistStackedArt(pl, 'width:100%;height:100%;');
     li.innerHTML = `
-      <div class="pl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg></div>
+      <div class="pl-icon" style="overflow:hidden;border-radius:6px;">${iconHtml}</div>
       <div class="pl-info">
         <div class="pl-name">${escHtml(pl.name)}</div>
         <div class="pl-count">${pl.tracks.length} track${pl.tracks.length !== 1 ? 's' : ''}</div>
@@ -1082,12 +1190,39 @@ function renderMobilePlaylists() {
   });
 }
 
+// ── Playlist stacked album art helper ────────────────────────
+function buildPlaylistStackedArt(pl, extraStyle = '') {
+  // Collect unique album art URLs from the playlist's tracks (up to 3)
+  const seen = new Set();
+  const arts = [];
+  for (const t of pl.tracks) {
+    const url = getAlbumArt(t.albumName);
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      arts.push(url);
+      if (arts.length >= 3) break;
+    }
+  }
+  if (!arts.length) {
+    // Fall back to the default hamburger SVG icon
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="${extraStyle}"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>`;
+  }
+  const stackClass = arts.length === 1 ? '' : `stack-${arts.length}`;
+  const covers = arts.map(url => `<img class="stacked-cover" src="${url}" alt="" />`).join('');
+  return `<div class="playlist-stacked-art ${stackClass}" style="${extraStyle}">${covers}</div>`;
+}
+
 function openPlaylistDetail(pl) {
   state.playlistView = pl.id;
   $('pl-detail-title').textContent = pl.name;
   $('pl-detail-count').textContent = `${pl.tracks.length} track${pl.tracks.length !== 1 ? 's' : ''}`;
   renderTrackList('pl-track-list', pl.tracks, null, pl.id);
   renderSidebarPlaylists();
+  renderMobilePlaylists();
+
+  // Update the big playlist icon in the detail view
+  const artEl = $('pl-detail-art');
+  if (artEl) artEl.innerHTML = buildPlaylistStackedArt(pl);
 
   $$('.view').forEach(v => v.classList.remove('active'));
   $('view-playlist-detail').classList.add('active');
@@ -1233,13 +1368,22 @@ function handleSearch() {
     ul.className = 'track-list';
     matchedTracks.forEach((track, i) => {
       const li = document.createElement('li');
+      const isActive = state.currentTrack && state.currentTrack.path === track.path;
+      li.className = isActive ? 'active' : '';
+      li.dataset.path = track.path;
+      li.dataset.index = i;
       li.innerHTML = `
         <div class="swipe-bg">
           <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           Delete from Device
         </div>
         <div class="swipe-content">
-          <span class="track-num">${i + 1}</span>
+          <div class="track-num">
+            <span class="track-num-wrap">${i + 1}</span>
+            <div class="playing-indicator">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
           <div class="track-info">
             <p class="track-title">${escHtml(getTrackTitle(track))}</p>
             <p class="player-album">${escHtml(track.albumName)}</p>
@@ -1350,6 +1494,12 @@ function formatTime(sec) {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
+}
+
+// ── Shuffle mode helper ───────────────────────────────────────
+function setShuffleMode(enabled) {
+  state.shuffle = enabled;
+  $('btn-shuffle')?.classList.toggle('active', enabled);
 }
 
 function shuffleArray(arr) {
@@ -1481,9 +1631,11 @@ async function deleteSongFromDevice(track) {
       showLibrarySubView('artists');
     }
   } else if (state.librarySubView === 'songs') {
-    renderAllSongs();
+    const q = $('songs-search-input')?.value || '';
+    renderAllSongs(q);
   } else if (state.librarySubView === 'downloaded') {
-    renderDownloadedSongs();
+    const q = $('downloaded-search-input')?.value || '';
+    renderDownloadedSongs(q);
   } else if (state.view === 'playlists' && state.playlistView) {
     const pl = state.playlists.find(p => p.id === state.playlistView);
     if (pl) openPlaylistDetail(pl);
@@ -1599,9 +1751,11 @@ function openRenameModal(track) {
             const data = map.get(state.artistView);
             if (data) openArtistDetail(state.artistView, data.tracks, data.artistArt);
           } else if (state.librarySubView === 'songs') {
-            renderAllSongs();
+            const q = $('songs-search-input')?.value || '';
+            renderAllSongs(q);
           } else if (state.librarySubView === 'downloaded') {
-            renderDownloadedSongs();
+            const q = $('downloaded-search-input')?.value || '';
+            renderDownloadedSongs(q);
           } else if (state.view === 'playlists' && state.playlistView) {
             const pl = state.playlists.find(p => p.id === state.playlistView);
             if (pl) openPlaylistDetail(pl);
