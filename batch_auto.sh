@@ -28,29 +28,25 @@ while true; do
     # Ask for Link
     read -r -p "▶ Paste YouTube/Playlist Link (or type 'done' to run): " link
     
-    # If user typed 'done', break out of the loop
-    if [[ "$link" == "done" ]]; then
-        break
+    if [[ "$link" == "done" ]]; then break; fi
+    if [[ -z "$link" ]]; then continue; fi
+    
+    # NEW: Ask if it's a playlist or single video
+    read -r -p "  Is this a [P]laylist or [S]ingle video? [P/s]: " type_choice
+    if [[ "$type_choice" =~ ^[Ss]$ ]]; then
+        mode="single"
+    else
+        mode="album"
     fi
     
-    # Skip empty lines if user accidentally presses enter
-    if [[ -z "$link" ]]; then
-        continue
-    fi
-    
-    # Ask for Album Name
     read -r -p "  Name the playlist/album (Press Enter for '_Unsorted'): " album
+    if [[ -z "$album" ]]; then album="_Unsorted"; fi
     
-    # Apply default if left blank
-    if [[ -z "$album" ]]; then
-        album="_Unsorted"
-    fi
-    
-    # Save to arrays
     urls+=("$link")
     albums+=("$album")
+    modes+=("$mode")   # ADD this array at the top too: modes=()
     
-    echo -e "  ${GREEN}✓ Added:${NC} '$album'"
+    echo -e "  ${GREEN}✓ Added:${NC} '$album' (${mode})"
     echo ""
     
     # Ask if they want to add more
@@ -115,7 +111,7 @@ for i in "${!urls[@]}"; do
     echo "=========================================" >> "$LOG_FILE"
 
     # Run your command, send all stdout & stderr to the log file
-    ./download_and_stem.sh --album "${urls[$i]}" "${albums[$i]}" >> "$LOG_FILE" 2>&1
+    ./download_and_stem.sh "--${modes[$i]}" "${urls[$i]}" "${albums[$i]}" >> "$LOG_FILE" 2>&1
     
     # Update progress bar
     current=$((i + 1))
