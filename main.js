@@ -1361,6 +1361,16 @@ function handleSearch() {
       }).catch(err => console.error('Failed to trigger playlist download:', err));
     }
   }
+  if (isYouTubeSingleUrl(rawQ)) {
+    if (state.lastTriggeredPlaylist !== rawQ) {
+      state.lastTriggeredPlaylist = rawQ;
+      fetch(`${BASE_URL}/api/download-single`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawQ })
+      }).catch(err => console.error('Failed to trigger single download:', err));
+    }
+  }
 
   const q = rawQ.toLowerCase();
   const results = $('search-results');
@@ -1448,6 +1458,20 @@ function handleSearch() {
   if (!matchedTracks.length && !matchedAlbums.length) {
     results.innerHTML = `<p class="loading-msg">No results for "${escHtml(q)}"</p>`;
   }
+}
+
+function isYouTubeSingleUrl(str) {
+  let urlStr = str.trim();
+  if (!/^https?:\/\//i.test(urlStr)) urlStr = 'https://' + urlStr;
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com')) {
+      // Has a video ID but NO playlist parameter
+      return (parsed.searchParams.has('v') || host.includes('youtu.be')) && !parsed.searchParams.has('list');
+    }
+  } catch (e) {}
+  return false;
 }
 
 // ── Media Session API (lockscreen controls) ───────────────────
