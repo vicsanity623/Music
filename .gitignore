@@ -4,6 +4,7 @@
 __pycache__
 .DS_Store
 download_and_stem.sh
+playlist_import_log.txt
 serve.sh
 /benchmarks
 roadmap.md

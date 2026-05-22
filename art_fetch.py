@@ -1369,7 +1369,22 @@ def main():
     dirs = sorted(dirs)
 
     if args.album:
-        dirs = [d for d in dirs if args.album.lower() in d.name.lower()]
+        # Check if the folder matches exactly as a relative path under ALBUMS_DIR first
+        target_path = ALBUMS_DIR / args.album
+        if target_path.exists() and target_path.is_dir():
+            dirs = [target_path]
+        elif args.album.lower() == "_unsorted":
+            # If the root _Unsorted folder doesn't exist, do not fall back to other _Unsorted folders
+            dirs = []
+        else:
+            # Fallback to exact name match of the folder
+            matched_dirs = [d for d in dirs if args.album.lower() == d.name.lower()]
+            if matched_dirs:
+                dirs = matched_dirs
+            else:
+                # Fallback to substring match
+                dirs = [d for d in dirs if args.album.lower() in d.name.lower()]
+        
         if not dirs:
             sys.exit(f"No album directory matching: {args.album}")
 
