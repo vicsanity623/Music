@@ -370,6 +370,169 @@ def extract_embedded_art(path):
         pass
     return None
 
+def extract_yt_video_id(url):
+    if not url:
+        return None
+    m = re.search(r"v=([a-zA-Z0-9_\-]+)", url)
+    if m:
+        return m.group(1)
+    m = re.search(r"youtu\.be/([a-zA-Z0-9_\-]+)", url)
+    if m:
+        return m.group(1)
+    m = re.search(r"embed/([a-zA-Z0-9_\-]+)", url)
+    if m:
+        return m.group(1)
+    if len(url) == 11 and re.match(r"^[a-zA-Z0-9_\-]+$", url):
+        return url
+    return None
+
+def get_youtube_url_from_file(path):
+    try:
+        if path.suffix.lower() == ".mp3":
+            a = MP3(path)
+            if a.tags:
+                for tag in a.tags.values():
+                    cls_name = tag.__class__.__name__
+                    if cls_name == "TXXX":
+                        for val in tag.text:
+                            if "youtube.com" in val or "youtu.be" in val:
+                                return val
+                    elif cls_name == "COMM":
+                        for val in tag.text:
+                            if "youtube.com" in val or "youtu.be" in val:
+                                return val
+        elif path.suffix.lower() == ".flac":
+            a = FLAC(path)
+            for key, val in a.items():
+                for v in val:
+                    if "youtube.com" in v or "youtu.be" in v:
+                        return v
+    except Exception:
+        pass
+    return None
+
+def fetch_yt_thumbnail(video_id):
+    if not video_id:
+        return None
+    urls = [
+        f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
+        f"https://img.youtube.com/vi/{video_id}/sddefault.jpg",
+        f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200 and len(r.content) > 2000:
+                return r.content
+        except Exception:
+            pass
+    return None
+
+def fetch_from_itunes(title, artist, album):
+    queries = []
+    if artist and album and album.lower() != "_unsorted":
+        queries.append(f"{artist} {album}")
+    if artist and title:
+        queries.append(f"{artist} {title}")
+    if title:
+        queries.append(title)
+        
+    for query in queries:
+        url = "https://itunes.apple.com/search"
+        params = {"term": query, "media": "music", "limit": 3}
+        try:
+            r = requests.get(url, params=params, timeout=10)
+            if r.status_code == 200:
+                results = r.json().get("results", [])
+                for res in results:
+                    img_url = res.get("artworkUrl100") or res.get("artworkUrl60x60")
+                    if img_url:
+                        high_res = img_url.replace("100x100bb.jpg", "600x600bb.jpg").replace("100x100bb.png", "600x600bb.png")
+                        high_res = high_res.replace("100x100", "600x600")
+                        r_img = requests.get(high_res, timeout=10)
+                        if r_img.status_code == 200 and len(r_img.content) > 2000:
+                            return r_img.content
+        except Exception:
+            pass
+    return None
+
+def fetch_from_deezer(title, artist, album):
+    queries = []
+    if artist and album and album.lower() != "_unsorted":
+        queries.append(f"{artist} {album}")
+    if artist and title:
+        queries.append(f"{artist} {title}")
+    if title:
+        queries.append(title)
+        
+    for query in queries:
+        url = "https://api.deezer.com/search"
+        params = {"q": query, "limit": 3}
+        try:
+            r = requests.get(url, params=params, timeout=10)
+            if r.status_code == 200:
+                results = r.json().get("data", [])
+                for res in results:
+                    album_info = res.get("album", {})
+                    img_url = album_info.get("cover_xl") or album_info.get("cover_big") or album_info.get("cover_medium")
+                    if img_url:
+                        r_img = requests.get(img_url, timeout=10)
+                        if r_img.status_code == 200 and len(r_img.content) > 2000:
+                            return r_img.content
+        except Exception:
+            pass
+    return None
+
+def fetch_cover_art_robust(path, final_title, final_artist, final_album, match=None):
+    # 1. Try to extract already embedded art (e.g. from yt-dlp)
+    print(" (extracting embedded art…", end="", flush=True)
+    embedded = extract_embedded_art(path)
+    if embedded:
+        print(" found!)", end="", flush=True)
+        return embedded
+    print(" not found)", end="", flush=True)
+
+    # 2. Try CAA if we have a MusicBrainz match
+    if match and match.get("release"):
+        print(" (fetching from CAA release…", end="", flush=True)
+        data = fetch_caa(match["release"])
+        if not data and match.get("release_group"):
+            data = fetch_caa_group(match["release_group"])
+        if data:
+            print(" success!)", end="", flush=True)
+            return data
+        print(" failed)", end="", flush=True)
+
+    # 3. Try YouTube thumbnail fallback
+    yt_url = get_youtube_url_from_file(path)
+    if yt_url:
+        video_id = extract_yt_video_id(yt_url)
+        if video_id:
+            print(f" (fetching YouTube thumbnail {video_id}…", end="", flush=True)
+            data = fetch_yt_thumbnail(video_id)
+            if data:
+                print(" success!)", end="", flush=True)
+                return data
+            print(" failed)", end="", flush=True)
+
+    # 4. Try iTunes search fallback
+    print(" (searching iTunes…", end="", flush=True)
+    data = fetch_from_itunes(final_title, final_artist, final_album)
+    if data:
+        print(" success!)", end="", flush=True)
+        return data
+    print(" failed)", end="", flush=True)
+
+    # 5. Try Deezer search fallback
+    print(" (searching Deezer…", end="", flush=True)
+    data = fetch_from_deezer(final_title, final_artist, final_album)
+    if data:
+        print(" success!)", end="", flush=True)
+        return data
+    print(" failed)", end="", flush=True)
+
+    return None
+
 def is_version_mismatch(query, candidate):
     query_norm = query.lower()
     candidate_norm = candidate.lower()
@@ -1073,17 +1236,14 @@ def process_album(album_dir, dry_run=False):
             # Fetch / embed cover art
             art_path = dest_dir / "cover.jpg"
             art_data = None
-            if not art_path.exists() and match and match.get("release"):
-                print(f"      Art    : fetching…", end=" ", flush=True)
-                art_data = fetch_caa(match["release"])
-                if not art_data and match.get("release_group"):
-                    art_data = fetch_caa_group(match["release_group"])
-                
-                if art_data: 
+            if not art_path.exists():
+                print(f"      Art    : fetching…", end="", flush=True)
+                art_data = fetch_cover_art_robust(f, final_title, final_artist, final_album, match)
+                if art_data:
                     art_path.write_bytes(art_data)
-                    print(f"✓")
-                else: 
-                    print("✗")
+                    print(f" ✓")
+                else:
+                    print(" ✗")
             elif art_path.exists():
                 try:
                     art_data = art_path.read_bytes()

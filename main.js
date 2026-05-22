@@ -210,7 +210,7 @@ function getArtistsMap() {
     const sepIdx = album.name.indexOf(' - ');
     const artist = sepIdx > -1 ? album.name.substring(0, sepIdx) : album.name;
     if (!map.has(artist)) map.set(artist, { tracks: [], artistArt: null });
-    
+
     if (album.artist_art && !map.get(artist).artistArt) {
       map.get(artist).artistArt = album.artist_art;
     }
@@ -231,20 +231,20 @@ function renderArtistsList(filterText = '') {
 
   const map = getArtistsMap();
   let sorted = [...map.keys()].sort((a, b) => a.localeCompare(b));
-  
+
   if (filterText) {
     const lower = filterText.toLowerCase();
     sorted = sorted.filter(a => a.toLowerCase().includes(lower));
   }
-  
+
   if (!sorted.length) {
     ul.innerHTML = `<p class="loading-msg">No artists found.</p>`;
     return;
   }
-  
+
   let currentLetter = '';
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('');
-  
+
   // Set up A-Z scroll bar
   if (!filterText && scrollContainer) {
     alphabet.forEach(char => {
@@ -262,7 +262,7 @@ function renderArtistsList(filterText = '') {
   sorted.forEach(artist => {
     const data = map.get(artist);
     const tracks = data.tracks;
-    
+
     // Check for letter separator
     const firstChar = artist.charAt(0).toUpperCase();
     const letter = /[A-Z]/.test(firstChar) ? firstChar : '#';
@@ -277,7 +277,7 @@ function renderArtistsList(filterText = '') {
 
     const li = document.createElement('li');
     li.className = 'artist-list-item';
-    
+
     let artHtml = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
                      <circle cx="12" cy="7" r="4"/>
@@ -307,7 +307,7 @@ function openArtistDetail(artist, tracks, artistArt) {
   state.artistView = artist;
   $('artist-detail-name').textContent = artist;
   $('artist-detail-count').textContent = `${tracks.length} song${tracks.length !== 1 ? 's' : ''}`;
-  
+
   const avatarIcon = $('artist-avatar-icon');
   if (avatarIcon) {
     if (artistArt) {
@@ -392,9 +392,9 @@ function renderSongsIntoList(ul, tracks) {
       <div class="swipe-content">
         <div class="song-thumb" style="position:relative;${artUrl ? 'background:#111118;' : 'background:var(--bg-active);'}">
           ${artUrl
-          ? `<img class="song-thumb-art" src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
-          : `<svg class="song-thumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
-        }
+        ? `<img class="song-thumb-art" src="${artUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" loading="lazy"/>`
+        : `<svg class="song-thumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:55%;height:55%;color:var(--text-muted)"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`
+      }
           <div class="playing-indicator" style="position:absolute;inset:0;margin:auto;width:fit-content;height:fit-content;">
             <span></span><span></span><span></span>
           </div>
@@ -1063,7 +1063,7 @@ function setupEventListeners() {
 
   // Search
   $('search-input').addEventListener('input', debounce(handleSearch, 150));
-  
+
   // Artists Search
   $('artists-search-input')?.addEventListener('input', e => {
     renderArtistsList(e.target.value.trim());
@@ -1345,7 +1345,7 @@ function isYouTubePlaylistUrl(str) {
     if (host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com')) {
       return parsed.searchParams.has('list');
     }
-  } catch (e) {}
+  } catch (e) { }
   return false;
 }
 
@@ -1359,6 +1359,16 @@ function handleSearch() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: rawQ })
       }).catch(err => console.error('Failed to trigger playlist download:', err));
+    }
+  }
+  if (isYouTubeSingleUrl(rawQ)) {
+    if (state.lastTriggeredPlaylist !== rawQ) {
+      state.lastTriggeredPlaylist = rawQ;
+      fetch(`${BASE_URL}/api/download-single`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawQ })
+      }).catch(err => console.error('Failed to trigger single download:', err));
     }
   }
 
@@ -1448,6 +1458,20 @@ function handleSearch() {
   if (!matchedTracks.length && !matchedAlbums.length) {
     results.innerHTML = `<p class="loading-msg">No results for "${escHtml(q)}"</p>`;
   }
+}
+
+function isYouTubeSingleUrl(str) {
+  let urlStr = str.trim();
+  if (!/^https?:\/\//i.test(urlStr)) urlStr = 'https://' + urlStr;
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com')) {
+      // Has a video ID but NO playlist parameter
+      return (parsed.searchParams.has('v') || host.includes('youtu.be')) && !parsed.searchParams.has('list');
+    }
+  } catch (e) { }
+  return false;
 }
 
 // ── Media Session API (lockscreen controls) ───────────────────
@@ -1546,7 +1570,7 @@ function debounce(fn, ms) {
 async function downloadForOffline(track) {
   if (!('caches' in window)) return;
   try {
-    const cache = await caches.open('soundvault-audio-v5.7');
+    const cache = await caches.open('soundvault-audio-v5.8');
     const urlsToCache = [`${BASE_URL}/${track.path}`];
     if (track.stems) {
       for (const stem in track.stems) {
@@ -1596,7 +1620,7 @@ async function deleteFromCache(track) {
       urls.push(`${BASE_URL}/${track.stems[stem]}`);
     }
   }
-  for (const cacheName of ['soundvault-audio-v5.7', 'soundvault-audio-v1', 'soundvault-audio-v4.0']) {
+  for (const cacheName of ['soundvault-audio-v5.8', 'soundvault-audio-v1', 'soundvault-audio-v4.0']) {
     try {
       const cache = await caches.open(cacheName);
       for (const url of urls) {
@@ -1611,16 +1635,16 @@ async function deleteFromCache(track) {
 async function deleteSongFromDevice(track) {
   // 1. Add to local set of deleted tracks
   state.deletedSongs.add(track.path);
-  
+
   // 2. Remove from downloaded set if it's there
   state.downloaded.delete(track.path);
-  
+
   // 3. Delete from Cache API
   await deleteFromCache(track);
-  
+
   // 4. Save to localStorage
   persist();
-  
+
   // 5. If currently playing this track, stop or play next
   if (state.currentTrack && state.currentTrack.path === track.path) {
     if (state.queue.length > 1) {
@@ -1645,7 +1669,7 @@ async function deleteSongFromDevice(track) {
   // 8. Apply filter & Re-render
   filterLocalLibrary();
   renderAll();
-  
+
   // Refresh detail subviews
   if (state.librarySubView === 'albums' && state.albumView) {
     const album = state.library?.albums.find(a => a.name === state.albumView);
@@ -1732,7 +1756,7 @@ function initSwipeToDelete(li, track) {
 
 function initLongPress(element, callback) {
   let pressTimer;
-  
+
   const start = (e) => {
     if (e.type === 'click' && e.button !== 0) return;
     clearTimeout(pressTimer);
@@ -1740,15 +1764,15 @@ function initLongPress(element, callback) {
       callback();
     }, 600);
   };
-  
+
   const cancel = () => {
     clearTimeout(pressTimer);
   };
-  
+
   element.addEventListener('touchstart', start, { passive: true });
   element.addEventListener('touchend', cancel, { passive: true });
   element.addEventListener('touchmove', cancel, { passive: true });
-  
+
   element.addEventListener('mousedown', start);
   element.addEventListener('mouseup', cancel);
   element.addEventListener('mouseleave', cancel);
@@ -1767,10 +1791,10 @@ function openRenameModal(track) {
           persist();
           showToast('Song renamed');
           closeModal();
-          
+
           // Apply changes to rendering
           renderAll();
-          
+
           if (state.librarySubView === 'albums' && state.albumView) {
             const album = state.library?.albums.find(a => a.name === state.albumView);
             if (album) openAlbumDetail(album);
@@ -1788,7 +1812,7 @@ function openRenameModal(track) {
             const pl = state.playlists.find(p => p.id === state.playlistView);
             if (pl) openPlaylistDetail(pl);
           }
-          
+
           if (state.currentTrack && state.currentTrack.path === track.path) {
             updatePlayerUI(state.currentTrack);
             updateMediaSession(state.currentTrack);

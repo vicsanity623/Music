@@ -76,12 +76,13 @@ class MusicHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        import json
+        import subprocess
+        import datetime
+
         if self.path == '/api/download-playlist':
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
-            import json
-            import subprocess
-            import datetime
             try:
                 data = json.loads(post_data.decode('utf-8'))
                 playlist_url = data.get('url')
@@ -101,23 +102,55 @@ class MusicHandler(SimpleHTTPRequestHandler):
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
                     self.wfile.write(json.dumps({'status': 'ok'}).encode('utf-8'))
-                    return
                 else:
                     self.send_response(400)
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
                     self.wfile.write(json.dumps({'error': 'Missing url'}).encode('utf-8'))
-                    return
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
-                return
-        
+            return
+
+        if self.path == '/api/download-single':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                video_url = data.get('url')
+                if video_url:
+                    script_dir = os.environ.get('SCRIPT_DIR', '')
+                    script_path = os.path.join(script_dir, 'download_and_stem.sh')
+                    log_path = os.path.join(script_dir, 'playlist_import_log.txt')
+                    with open(log_path, 'a') as f_log:
+                        f_log.write(f"\n--- Single import started at {datetime.datetime.now()} for {video_url} ---\n")
+                        subprocess.Popen(
+                            [script_path, '--single', video_url, '_Unsorted'],
+                            cwd=script_dir,
+                            stdout=f_log,
+                            stderr=subprocess.STDOUT
+                        )
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'ok'}).encode('utf-8'))
+                else:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'Missing url'}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
         self.send_response(404)
         self.end_headers()
-
+        
     def guess_type(self, path):
         t = super().guess_type(path)
         ext = os.path.splitext(path)[1].lower()

@@ -79,7 +79,7 @@ download_track() {
     --audio-quality "$AUDIO_QUALITY"
     --embed-metadata
     --add-metadata
-    --parse-metadata "%(uploader)s:%(artist)s"
+    --embed-thumbnail
     --output "$out_dir/%(autonumber)s - %(title)s.%(ext)s"
     --autonumber-start "$track_num"
     --restrict-filenames
@@ -143,7 +143,7 @@ process_album() {
       --audio-quality "$AUDIO_QUALITY"
       --embed-metadata
       --add-metadata
-      --parse-metadata "%(uploader)s:%(artist)s"
+      --embed-thumbnail
       --output "$album_dir/${padded} - %(title)s.%(ext)s"
       --restrict-filenames
       --no-mtime
@@ -203,7 +203,7 @@ process_single() {
     --audio-quality "$AUDIO_QUALITY"
     --embed-metadata
     --add-metadata
-    --parse-metadata "%(uploader)s:%(artist)s"
+    --embed-thumbnail
     --output "$album_dir/%(title)s.%(ext)s"
     --restrict-filenames
     --no-mtime
