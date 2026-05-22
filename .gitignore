@@ -7,5 +7,6 @@ download_and_stem.sh
 serve.sh
 /benchmarks
 roadmap.md
+batch_dl_log.txt
 *.crt
 *.key

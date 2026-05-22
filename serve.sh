@@ -50,6 +50,9 @@ start_server() {
   ok "Local access  → http://localhost:$PORT"
   echo ""
 
+  # Capture SCRIPT_DIR before cd
+  export SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
   cd "$WEB_ROOT"
 
   # Python 3 — allows CORS and proper MIME types
@@ -62,11 +65,58 @@ PORT = int(sys.argv[1])
 class MusicHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Range')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Range')
         self.send_header('Accept-Ranges', 'bytes')
         self.send_header('Cache-Control', 'no-cache')
         super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path == '/api/download-playlist':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            import json
+            import subprocess
+            import datetime
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                playlist_url = data.get('url')
+                if playlist_url:
+                    script_dir = os.environ.get('SCRIPT_DIR', '')
+                    script_path = os.path.join(script_dir, 'download_and_stem.sh')
+                    log_path = os.path.join(script_dir, 'playlist_import_log.txt')
+                    with open(log_path, 'a') as f_log:
+                        f_log.write(f"\n--- Import started at {datetime.datetime.now()} for {playlist_url} ---\n")
+                        subprocess.Popen(
+                            [script_path, '--album', playlist_url, '_Unsorted'],
+                            cwd=script_dir,
+                            stdout=f_log,
+                            stderr=subprocess.STDOUT
+                        )
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'ok'}).encode('utf-8'))
+                    return
+                else:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'Missing url'}).encode('utf-8'))
+                    return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+                return
+        
+        self.send_response(404)
+        self.end_headers()
 
     def guess_type(self, path):
         t = super().guess_type(path)

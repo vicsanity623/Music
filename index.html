@@ -305,6 +305,13 @@
           <button class="back-btn" id="btn-back-to-library-from-songs">← Library</button>
         </div>
         <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:800;margin-bottom:8px;">Songs</h1>
+        <div class="search-bar-wrap" style="margin-bottom: 16px;">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input type="search" id="songs-search-input" placeholder="Search" autocomplete="off" />
+        </div>
         <div class="songs-actions">
           <button class="btn-play-all" id="btn-play-all-songs">
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -331,6 +338,13 @@
           <button class="back-btn" id="btn-back-to-library-from-downloaded">← Library</button>
         </div>
         <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:800;margin-bottom:8px;">Downloaded</h1>
+        <div class="search-bar-wrap" style="margin-bottom: 16px;">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input type="search" id="downloaded-search-input" placeholder="Search" autocomplete="off" />
+        </div>
         <div class="songs-actions" id="downloaded-actions">
           <button class="btn-play-all" id="btn-play-downloaded">
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -444,7 +458,7 @@
       </div>
       <div class="player-info">
         <p id="player-title" class="player-title">—</p>
-        <p id="player-album" class="player-album">—</p>
+        <p id="player-album" class="player-album"><span>—</span></p>
       </div>
       <button class="player-like" id="btn-like" title="Like">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
