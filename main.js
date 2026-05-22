@@ -1546,7 +1546,7 @@ function debounce(fn, ms) {
 async function downloadForOffline(track) {
   if (!('caches' in window)) return;
   try {
-    const cache = await caches.open('soundvault-audio-v5.7');
+    const cache = await caches.open('soundvault-audio-v5.8');
     const urlsToCache = [`${BASE_URL}/${track.path}`];
     if (track.stems) {
       for (const stem in track.stems) {
@@ -1596,7 +1596,7 @@ async function deleteFromCache(track) {
       urls.push(`${BASE_URL}/${track.stems[stem]}`);
     }
   }
-  for (const cacheName of ['soundvault-audio-v5.7', 'soundvault-audio-v1', 'soundvault-audio-v4.0']) {
+  for (const cacheName of ['soundvault-audio-v5.8', 'soundvault-audio-v1', 'soundvault-audio-v4.0']) {
     try {
       const cache = await caches.open(cacheName);
       for (const url of urls) {
