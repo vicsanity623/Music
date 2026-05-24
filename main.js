@@ -121,6 +121,7 @@ async function loadLibrary() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     state.rawLibrary = await res.json();
     filterLocalLibrary();
+    migrateStaleData();
   } catch (e) {
     console.error('Failed to load library.json', e);
     state.rawLibrary = { albums: [] };
@@ -1609,6 +1610,184 @@ function filterLocalLibrary() {
       album.tracks = album.tracks.filter(t => !state.deletedSongs.has(t.path));
     });
     state.library.albums = state.library.albums.filter(album => album.tracks.length > 0);
+  }
+}
+
+function migrateStaleData() {
+  if (!state.library || !state.library.albums) return;
+
+  // Build a fast lookup map of current library tracks by path
+  const allLibraryTracksByPath = new Map();
+  state.library.albums.forEach(album => {
+    album.tracks.forEach(track => {
+      allLibraryTracksByPath.set(track.path, { ...track, albumName: album.name });
+    });
+  });
+
+  let changed = false;
+
+  // Helper to find new path for a given old path
+  const resolvePath = (oldPath) => {
+    if (allLibraryTracksByPath.has(oldPath)) return oldPath;
+    
+    const parts = oldPath.split('/');
+    if (parts.length < 2) return null;
+    const oldFilename = parts[parts.length - 1];
+    const oldAlbumFolder = parts[parts.length - 2];
+    
+    const normOldFilename = oldFilename.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normOldAlbum = oldAlbumFolder.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    let bestMatch = null;
+    let highestScore = 0;
+
+    state.library.albums.forEach(album => {
+      const normAlbum = album.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const albumMatch = normAlbum === normOldAlbum || normAlbum.includes(normOldAlbum) || normOldAlbum.includes(normAlbum);
+
+      album.tracks.forEach(track => {
+        let score = 0;
+        if (albumMatch) score += 50;
+
+        const trackFilename = track.path.split('/').pop();
+        const normTrackFilename = trackFilename.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normTrackFilename === normOldFilename) {
+          score += 40;
+        } else if (normTrackFilename.includes(normOldFilename) || normOldFilename.includes(normTrackFilename)) {
+          score += 20;
+        }
+
+        const normTrackTitle = (track.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normOldFilename.includes(normTrackTitle) || normTrackTitle.includes(normOldFilename)) {
+          score += 15;
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestMatch = track.path;
+        }
+      });
+    });
+
+    if (highestScore >= 35) return bestMatch;
+    return null;
+  };
+
+  // 1. Migrate liked songs
+  const newLiked = new Set();
+  state.liked.forEach(oldPath => {
+    const newPath = resolvePath(oldPath);
+    if (newPath) {
+      newLiked.add(newPath);
+      if (newPath !== oldPath) changed = true;
+    } else {
+      newLiked.add(oldPath);
+    }
+  });
+  state.liked = newLiked;
+
+  // 2. Migrate downloaded songs
+  const newDownloaded = new Set();
+  state.downloaded.forEach(oldPath => {
+    const newPath = resolvePath(oldPath);
+    if (newPath) {
+      newDownloaded.add(newPath);
+      if (newPath !== oldPath) changed = true;
+    } else {
+      newDownloaded.add(oldPath);
+    }
+  });
+  state.downloaded = newDownloaded;
+
+  // 3. Migrate deleted songs
+  const newDeleted = new Set();
+  state.deletedSongs.forEach(oldPath => {
+    const newPath = resolvePath(oldPath);
+    if (newPath) {
+      newDeleted.add(newPath);
+      if (newPath !== oldPath) changed = true;
+    } else {
+      newDeleted.add(oldPath);
+    }
+  });
+  state.deletedSongs = newDeleted;
+
+  // 4. Migrate renamed songs
+  const newRenamed = {};
+  for (const oldPath in state.renamedSongs) {
+    const newPath = resolvePath(oldPath);
+    if (newPath) {
+      newRenamed[newPath] = state.renamedSongs[oldPath];
+      if (newPath !== oldPath) changed = true;
+    } else {
+      newRenamed[oldPath] = state.renamedSongs[oldPath];
+    }
+  }
+  state.renamedSongs = newRenamed;
+
+  // 5. Migrate playlists
+  state.playlists.forEach(pl => {
+    const updatedTracks = [];
+    pl.tracks.forEach(oldTrack => {
+      let match = allLibraryTracksByPath.get(oldTrack.path);
+      if (!match) {
+        // Search robustly
+        const normOldTitle = (oldTrack.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normOldAlbum = (oldTrack.albumName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const oldFilename = oldTrack.path.split('/').pop();
+        const normOldFilename = oldFilename.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        let bestMatch = null;
+        let highestScore = 0;
+
+        state.library.albums.forEach(album => {
+          const normAlbum = album.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const albumMatch = normAlbum === normOldAlbum || normAlbum.includes(normOldAlbum) || normOldAlbum.includes(normAlbum);
+
+          album.tracks.forEach(track => {
+            let score = 0;
+            if (albumMatch) score += 50;
+
+            const normTrackTitle = (track.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (normTrackTitle === normOldTitle && normOldTitle.length > 0) {
+              score += 40;
+            } else if (normTrackTitle.includes(normOldTitle) || normOldTitle.includes(normTrackTitle)) {
+              score += 20;
+            }
+
+            const trackFilename = track.path.split('/').pop();
+            const normTrackFilename = trackFilename.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (normTrackFilename === normOldFilename) {
+              score += 35;
+            }
+
+            if (score > highestScore) {
+              highestScore = score;
+              bestMatch = { ...track, albumName: album.name };
+            }
+          });
+        });
+
+        if (highestScore >= 35) {
+          match = bestMatch;
+        }
+      }
+
+      if (match) {
+        updatedTracks.push(match);
+        if (match.path !== oldTrack.path || match.title !== oldTrack.title) {
+          changed = true;
+        }
+      } else {
+        updatedTracks.push(oldTrack);
+      }
+    });
+    pl.tracks = updatedTracks;
+  });
+
+  if (changed) {
+    persist();
+    console.log('Migrated stale library data after rename/indexing.');
   }
 }
 
