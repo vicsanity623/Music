@@ -994,10 +994,30 @@ h2.section-title {
   -webkit-backdrop-filter: blur(20px);
   z-index: 100;
   transition: all var(--t);
+  position: relative;
+  overflow: visible;
 }
 
 #player-bar.hidden {
   display: none !important;
+}
+
+.back-to-top {
+  position: fixed;
+  bottom: 100px;
+  right: 40px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: opacity var(--t), transform var(--t);
+  z-index: 1000;
+  opacity: 0;
+}
+
+.back-to-top.visible {
+  opacity: 1;
 }
 
 /* Fullscreen Mode */
@@ -1150,7 +1170,48 @@ h2.section-title {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
+  transition: transform var(--t-slow);
+}
+
+.player-art::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(circle, var(--glow-color, var(--red)) 0%, transparent 70%);
+  opacity: 0.15;
+  filter: blur(25px);
+  z-index: -1;
+  transition: background 0.8s ease, opacity 0.8s ease;
+  pointer-events: none;
+}
+
+#player-bar.playing .player-art::before {
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.25; transform: scale(1.05); }
+}
+
+.player-art::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  background: var(--glow-color, var(--red));
+  filter: blur(20px);
+  opacity: 0.15;
+  z-index: -1;
+  transition: background 0.5s ease, opacity 0.5s ease;
+  border-radius: inherit;
+}
+
+#player-bar.fullscreen .player-art::after {
+  filter: blur(60px);
+  opacity: 0.25;
+  inset: -40px;
 }
 
 .player-art svg {
@@ -1289,6 +1350,27 @@ h2.section-title {
 
 .progress-track:hover {
   height: 6px;
+}
+
+.progress-tooltip {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-hi);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: var(--text-primary);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+  z-index: 101;
+}
+
+.progress-track:hover .progress-tooltip {
+  opacity: 1;
 }
 
 .progress-bar {
@@ -1484,6 +1566,42 @@ h2.section-title {
 #queue-list .q-album {
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* Queue item hover preview */
+#queue-list li {
+  position: relative;
+}
+
+#queue-list li:hover {
+  background: var(--bg-hover);
+  transition: all 0.2s ease;
+}
+
+/* Add play indicator on hover */
+.queue-hover-indicator {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--red);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#queue-list li:hover .queue-hover-indicator {
+  opacity: 1;
+}
+
+/* Optional: Add larger play preview on click */
+#queue-list li:active .queue-hover-indicator {
+  width: 36px;
+  height: 36px;
 }
 
 /* ── Modal ─────────────────────────────────────────────────── */
@@ -2166,6 +2284,7 @@ h2.section-title {
   width: 100%;
   max-width: min(85vw, 360px);
   margin: 0 auto;
+  --scroll-dist: 0px;
   overflow: hidden;
   white-space: nowrap;
   position: relative;
@@ -2236,4 +2355,9 @@ h2.section-title {
 
 #player-bar.fullscreen .player-top-controls {
   gap: 28px;
+}
+
+/* Hide volume wrapper on iOS devices where audio.volume is read-only */
+body.is-ios .volume-wrap {
+  display: none !important;
 }
