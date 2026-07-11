@@ -34,6 +34,7 @@ const state = {
   ctxPlaylistId: null,
   audioCtx: null,
   lastTriggeredPlaylist: null,
+  wakeLock: null,
 };
 
 // ── Audio engine ──────────────────────────────────────────────
@@ -704,9 +705,22 @@ function playCurrentQueueItem() {
 
 function loadAndPlay(track) {
   const url = `${BASE_URL}/${track.path}`;
+  
+  // Crucial for background: Reset and Load
+  audio.pause();
   audio.src = url;
   audio.load();
-  audio.play().catch(e => console.warn('Autoplay blocked:', e));
+
+  // Request wake lock when playback starts
+  requestWakeLock();
+
+  const playPromise = audio.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(e => {
+      console.warn('Playback failed:', e);
+      // If blocked, we might need a "Resume" button to appear
+    });
+  }
   state.isPlaying = true;
 }
 
@@ -777,15 +791,26 @@ audio.addEventListener('ended', () => {
     audio.play();
     return;
   }
+  
+  // Calculate next index immediately
   if (state.shuffle) {
     state.queueIndex = Math.floor(Math.random() * state.queue.length);
   } else {
     state.queueIndex++;
   }
+
   if (state.queueIndex >= state.queue.length) {
-    if (state.repeat === 'all') state.queueIndex = 0;
-    else { state.isPlaying = false; setPlayPauseIcon(false); return; }
+    if (state.repeat === 'all') {
+      state.queueIndex = 0;
+    } else {
+      state.isPlaying = false;
+      setPlayPauseIcon(false);
+      if (state.wakeLock) state.wakeLock.release(); // Let device sleep
+      return;
+    }
   }
+
+  // Trigger next track immediately
   playCurrentQueueItem();
 });
 
@@ -1653,6 +1678,24 @@ function formatTime(sec) {
   const s = Math.floor(sec % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 }
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      state.wakeLock = await navigator.wakeLock.request('screen');
+      console.log('Wake Lock active');
+    }
+  } catch (err) {
+    console.warn(`${err.name}, ${err.message}`);
+  }
+}
+
+// Re-request wake lock when app becomes visible again
+document.addEventListener('visibilitychange', async () => {
+  if (state.wakeLock !== null && document.visibilityState === 'visible') {
+    requestWakeLock();
+  }
+});
 
 // ── Shuffle mode helper ───────────────────────────────────────
 function setShuffleMode(enabled) {
