@@ -7,7 +7,7 @@
 
 // ── Config ────────────────────────────────────────────────────
 const IS_GITHUB_PAGES = window.location.hostname.includes('github.io');
-const BASE_URL = IS_GITHUB_PAGES ? 'https://vics-imac-1.tail37b4f2.ts.net' : window.location.origin;
+const BASE_URL = IS_GITHUB_PAGES ? 'https://vics-imac-2.tail37b4f2.ts.net' : window.location.origin;
 const LIBRARY_URL = `${BASE_URL}/library.json`;
 
 // ── State ─────────────────────────────────────────────────────
