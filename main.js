@@ -7,7 +7,7 @@
 
 // ── Config ────────────────────────────────────────────────────
 const IS_GITHUB_PAGES = window.location.hostname.includes('github.io');
-const BASE_URL = IS_GITHUB_PAGES ? 'https://vics-imac-1.tail37b4f2.ts.net' : window.location.origin;
+const BASE_URL = IS_GITHUB_PAGES ? 'https://vics-imac-2.tail37b4f2.ts.net' : window.location.origin;
 const LIBRARY_URL = `${BASE_URL}/library.json`;
 
 // ── State ─────────────────────────────────────────────────────
@@ -34,7 +34,6 @@ const state = {
   ctxPlaylistId: null,
   audioCtx: null,
   lastTriggeredPlaylist: null,
-  wakeLock: null,
 };
 
 // ── Audio engine ──────────────────────────────────────────────
@@ -67,13 +66,6 @@ function updateMarquee() {
 
 // -- Init -------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
-  // Detect iOS / iPadOS touch devices
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if (isIOS) {
-    document.body.classList.add('is-ios');
-  }
-
   loadPersistedData();
   registerSW();
   setupGreeting();
@@ -81,60 +73,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupMediaSession();
   await loadLibrary();
   renderAll();
-
-  // --- Back-to-Top button ------------------------------------------------
-  const backToTopBtn = document.createElement('button');
-  backToTopBtn.id = 'back-to-top';
-  backToTopBtn.title = 'Back to Top';
-  backToTopBtn.innerHTML = `<svg viewBox="0 0 24 24" stroke="var(--red)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`;
-  backToTopBtn.style.display = 'none';
-  backToTopBtn.style.position = 'fixed';
-  backToTopBtn.style.bottom = '70px';
-  backToTopBtn.style.right = '30px';
-  backToTopBtn.style.width = '48px';
-  backToTopBtn.style.height = '48px';
-  backToTopBtn.style.background = 'var(--bg-active)';
-  backToTopBtn.style.border = 'none';
-  backToTopBtn.style.borderRadius = '50%';
-  backToTopBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,.2)';
-  backToTopBtn.style.cursor = 'pointer';
-  backToTopBtn.addEventListener('mouseenter', () => {
-    backToTopBtn.style.boxShadow = '0 0 15px var(--red-glow)';
-  });
-  backToTopBtn.addEventListener('mouseleave', () => {
-    backToTopBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,.2)';
-  });
-  backToTopBtn.style.transition = 'opacity .3s, transform .3s';
-  backToTopBtn.style.zIndex = '999';
-  backToTopBtn.style.opacity = '0';
-
-  document.body.appendChild(backToTopBtn);
-
-  const mainContent = $('main-content');
-  if (mainContent) {
-    const toggleBackToTop = () => {
-      const visible = mainContent.scrollTop > window.innerHeight;
-      if (visible) {
-        backToTopBtn.style.display = 'block';
-        requestAnimationFrame(() => {
-          backToTopBtn.style.opacity = '1';
-          backToTopBtn.style.transform = 'translateY(0)';
-        });
-      } else {
-        backToTopBtn.style.opacity = '0';
-        backToTopBtn.style.transform = 'translateY(20px)';
-        setTimeout(() => {
-          if (mainContent.scrollTop <= window.innerHeight) backToTopBtn.style.display = 'none';
-        }, 300);
-      }
-    };
-
-    mainContent.addEventListener('scroll', debounce(toggleBackToTop, 50));
-
-    backToTopBtn.addEventListener('click', () => {
-      mainContent.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-  }
 });
 
 
@@ -222,18 +160,22 @@ function renderHomeAlbums() {
     grid.innerHTML = `<p class="loading-msg">No albums found. Run the download script first.</p>`;
     return;
   }
-  state.library.albums.forEach((album, i) => {
+  // sort by modified desc
+  const sorted = [...state.library.albums].sort((a, b) => (b.modified || 0) - (a.modified || 0));
+  sorted.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
 }
 
-// Recently added (reversed, first 8)
+// Recently added (sorted by modified timestamp, first 8)
 function renderLibraryRecent() {
   const grid = $('library-albums-recent');
   if (!grid) return;
   grid.innerHTML = '';
   if (!state.library?.albums?.length) return;
-  const recent = [...state.library.albums].reverse().slice(0, 8);
+  const recent = [...state.library.albums]
+    .sort((a, b) => (b.modified || 0) - (a.modified || 0))
+    .slice(0, 8);
   recent.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
@@ -254,7 +196,7 @@ function renderLibraryAlbums() {
   } else if (sort === 'z-a') {
     albums.sort((a, b) => b.name.localeCompare(a.name));
   } else {
-    albums.reverse();
+    albums.sort((a, b) => (b.modified || 0) - (a.modified || 0));
   }
   albums.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
@@ -396,11 +338,7 @@ function renderAllSongs(filterText = '') {
   if (!state.library?.albums) return;
   const allTracks = [];
   state.library.albums.forEach(album => {
-    album.tracks.forEach(t => {
-      if (!state.deletedSongs.has(t.path)) {
-        allTracks.push({ ...t, albumName: album.name });
-      }
-    });
+    album.tracks.forEach(t => allTracks.push({ ...t, albumName: album.name }));
   });
   allTracks.sort((a, b) => a.title.localeCompare(b.title));
   const q = filterText.toLowerCase().trim();
@@ -563,15 +501,6 @@ function makeAlbumCard(album, idx) {
 }
 
 // ── Album detail ──────────────────────────────────────────────
-/* Helper: reorder tracks in a playlist after drag-and-drop */
-function reorderPlaylistTracks(playlistId, fromIdx, toIdx) {
-  const pl = state.playlists.find(p => p.id === playlistId);
-  if (!pl) return;
-  const [moved] = pl.tracks.splice(fromIdx, 1);
-  pl.tracks.splice(toIdx, 0, moved);
-  persist();
-}
-
 function openAlbumDetail(album) {
   state.albumView = album.name;
   $('detail-title').textContent = album.name;
@@ -585,7 +514,6 @@ function openAlbumDetail(album) {
 
 function renderTrackList(listId, tracks, albumName, playlistId) {
   const ul = $(listId);
-  if (!ul) return;
   ul.innerHTML = '';
   tracks.forEach((track, i) => {
     const li = document.createElement('li');
@@ -593,35 +521,6 @@ function renderTrackList(listId, tracks, albumName, playlistId) {
     li.dataset.album = albumName || '';
     li.dataset.playlistId = playlistId || '';
     li.dataset.path = track.path;
-
-    /* --- DRAG-AND-DROP ENABLED ONLY FOR PLAYLISTS --- */
-    if (playlistId) {
-      li.draggable = true;
-      li.addEventListener('dragstart', (e) => {
-        if (e.dataTransfer) {
-          e.dataTransfer.setData('text/plain', i.toString());
-          e.dataTransfer.effectAllowed = 'move';
-        }
-        li.classList.add('dragging');
-      });
-      li.addEventListener('dragend', () => li.classList.remove('dragging'));
-      li.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        li.classList.add('drag-over');
-      });
-      li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
-      li.addEventListener('drop', (e) => {
-        e.preventDefault();
-        li.classList.remove('drag-over');
-        const fromIdx = parseInt(e.dataTransfer?.getData('text/plain') || '', 10);
-        if (!isNaN(fromIdx) && fromIdx !== i) {
-          reorderPlaylistTracks(playlistId, fromIdx, i);
-          const pl = state.playlists.find(p => p.id === playlistId);
-          if (pl) renderTrackList(listId, pl.tracks, null, playlistId);
-        }
-      });
-    }
 
     const isActive = state.currentTrack && state.currentTrack.path === track.path;
     li.className = isActive ? 'active' : '';
@@ -705,23 +604,11 @@ function playCurrentQueueItem() {
 
 function loadAndPlay(track) {
   const url = `${BASE_URL}/${track.path}`;
-  
-  // Crucial for background: Reset and Load
-  audio.pause();
   audio.src = url;
   audio.load();
-
-  // Request wake lock when playback starts
-  requestWakeLock();
-
-  const playPromise = audio.play();
-  if (playPromise !== undefined) {
-    playPromise.catch(e => {
-      console.warn('Playback failed:', e);
-      // If blocked, we might need a "Resume" button to appear
-    });
-  }
+  audio.play().catch(e => console.warn('Autoplay blocked:', e));
   state.isPlaying = true;
+  requestWakeLock();
 }
 
 function updatePlayerUI(track) {
@@ -791,36 +678,24 @@ audio.addEventListener('ended', () => {
     audio.play();
     return;
   }
-  
-  // Calculate next index immediately
   if (state.shuffle) {
     state.queueIndex = Math.floor(Math.random() * state.queue.length);
   } else {
     state.queueIndex++;
   }
-
   if (state.queueIndex >= state.queue.length) {
-    if (state.repeat === 'all') {
-      state.queueIndex = 0;
-    } else {
-      state.isPlaying = false;
-      setPlayPauseIcon(false);
-      if (state.wakeLock) state.wakeLock.release(); // Let device sleep
-      return;
-    }
+    if (state.repeat === 'all') state.queueIndex = 0;
+    else { state.isPlaying = false; setPlayPauseIcon(false); return; }
   }
-
-  // Trigger next track immediately
   playCurrentQueueItem();
 });
 
-audio.addEventListener('play', () => { state.isPlaying = true; setPlayPauseIcon(true); });
-audio.addEventListener('pause', () => { state.isPlaying = false; setPlayPauseIcon(false); });
+audio.addEventListener('play', () => { state.isPlaying = true; setPlayPauseIcon(true); requestWakeLock(); });
+audio.addEventListener('pause', () => { state.isPlaying = false; setPlayPauseIcon(false); releaseWakeLock(); });
 
 function setPlayPauseIcon(playing) {
   $('icon-play').classList.toggle('hidden', playing);
   $('icon-pause').classList.toggle('hidden', !playing);
-  $('player-bar').classList.toggle('playing', playing);
 }
 
 // ── Progress bar scrubbing ────────────────────────────────────
@@ -1244,14 +1119,31 @@ function renderQueuePanel() {
 }
 
 // ── Playback helpers ──────────────────────────────────────────
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (e) { /* user gesture required or not supported */ }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (e) { }
+    wakeLock = null;
+  }
+}
+
 function togglePlayPause() {
   if (!state.currentTrack) return;
-  if (audio.paused) { audio.play(); }
-  else { audio.pause(); }
+  if (audio.paused) { audio.play(); requestWakeLock(); }
+  else { audio.pause(); releaseWakeLock(); }
 }
 
 function playNext() {
-  if (!state.queue || state.queue.length === 0) return;
+  if (!state.queue.length) return;
   if (state.shuffle) {
     state.queueIndex = Math.floor(Math.random() * state.queue.length);
   } else {
@@ -1679,24 +1571,6 @@ function formatTime(sec) {
   return `${m}:${s}`;
 }
 
-async function requestWakeLock() {
-  try {
-    if ('wakeLock' in navigator) {
-      state.wakeLock = await navigator.wakeLock.request('screen');
-      console.log('Wake Lock active');
-    }
-  } catch (err) {
-    console.warn(`${err.name}, ${err.message}`);
-  }
-}
-
-// Re-request wake lock when app becomes visible again
-document.addEventListener('visibilitychange', async () => {
-  if (state.wakeLock !== null && document.visibilityState === 'visible') {
-    requestWakeLock();
-  }
-});
-
 // ── Shuffle mode helper ───────────────────────────────────────
 function setShuffleMode(enabled) {
   state.shuffle = enabled;
@@ -1712,10 +1586,7 @@ function shuffleArray(arr) {
 
 function debounce(fn, ms) {
   let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
 // ── Offline caching ──────────────────────────────────────────
@@ -1780,12 +1651,12 @@ function migrateStaleData() {
   // Helper to find new path for a given old path
   const resolvePath = (oldPath) => {
     if (allLibraryTracksByPath.has(oldPath)) return oldPath;
-    
+
     const parts = oldPath.split('/');
     if (parts.length < 2) return null;
     const oldFilename = parts[parts.length - 1];
     const oldAlbumFolder = parts[parts.length - 2];
-    
+
     const normOldFilename = oldFilename.toLowerCase().replace(/[^a-z0-9]/g, '');
     const normOldAlbum = oldAlbumFolder.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -2159,3 +2030,25 @@ function openRenameModal(track) {
     }
   }, 100);
 }
+
+// ── Back to Top ────────────────────────────────────────────────
+(function() {
+  const btn = $('btn-back-to-top');
+  if (!btn) return;
+
+  let ticking = false;
+
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        btn.classList.toggle('visible', window.scrollY > 400);
+        ticking = false;
+      });
+      ticking = true;
+    }
+  }, { passive: true });
+
+  btn.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+})();
