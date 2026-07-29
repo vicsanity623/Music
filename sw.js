@@ -1,10 +1,10 @@
 // ============================================================
-//  SoundVault — Service Worker  v6.0
+//  SoundVault — Service Worker  v6.1
 // ============================================================
 
-const CACHE_NAME = 'soundvault-v6.0';
+const CACHE_NAME = 'soundvault-v6.1';
 const STATIC_ASSETS = ['./', './index.html', './style.css', './main.js', './manifest.json'];
-const AUDIO_CACHE = 'soundvault-audio-v6.0';
+const AUDIO_CACHE = 'soundvault-audio-v6.1';
 const MAX_AUDIO_CACHE_MB = 4096; // 4 GB limit for audio cache
 
 // ── Install ───────────────────────────────────────────────────
