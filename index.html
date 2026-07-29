@@ -579,8 +579,9 @@
     <li id="ctx-rename">Rename</li>
   </ul>
 
-  <!-- ── Hidden audio element ───────────────────────────────── -->
-  <audio id="audio-engine" preload="auto" playsinline></audio>
+  <!-- ── Hidden audio elements ─────────────────────────────── -->
+  <audio id="audio-engine" preload="auto" playsinline x-webkit-airplay="allow"></audio>
+  <audio id="audio-preload" preload="auto" playsinline x-webkit-airplay="allow"></audio>
 
   <script src="main.js"></script>
 </body>
