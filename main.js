@@ -1559,7 +1559,7 @@ function handleSearch() {
   if (isYouTubePlaylistUrl(rawQ)) {
     if (state.lastTriggeredPlaylist !== rawQ) {
       state.lastTriggeredPlaylist = rawQ;
-      fetch(`${BASE_URL}/api/download-playlist`, {
+      fetch(`${BASE_URL}/download-playlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: rawQ })
@@ -1569,7 +1569,7 @@ function handleSearch() {
   if (isYouTubeSingleUrl(rawQ)) {
     if (state.lastTriggeredPlaylist !== rawQ) {
       state.lastTriggeredPlaylist = rawQ;
-      fetch(`${BASE_URL}/api/download-single`, {
+      fetch(`${BASE_URL}/download-single`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: rawQ })
