@@ -34,10 +34,14 @@ const state = {
   ctxPlaylistId: null,
   audioCtx: null,
   lastTriggeredPlaylist: null,
+  wakeLock: null,
 };
 
 // ── Audio engine ──────────────────────────────────────────────
 const audio = document.getElementById('audio-engine');
+const audioPreload = document.getElementById('audio-preload');
+let preloadReady = false;
+let preloadedTrack = null;
 
 // ── DOM refs ──────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -221,18 +225,21 @@ function renderHomeAlbums() {
     grid.innerHTML = `<p class="loading-msg">No albums found. Run the download script first.</p>`;
     return;
   }
-  state.library.albums.forEach((album, i) => {
+  const sorted = [...state.library.albums].sort((a, b) => (b.modified || 0) - (a.modified || 0));
+  sorted.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
 }
 
-// Recently added (reversed, first 8)
+// Recently added (sorted by modified timestamp, first 8)
 function renderLibraryRecent() {
   const grid = $('library-albums-recent');
   if (!grid) return;
   grid.innerHTML = '';
   if (!state.library?.albums?.length) return;
-  const recent = [...state.library.albums].reverse().slice(0, 8);
+  const recent = [...state.library.albums]
+    .sort((a, b) => (b.modified || 0) - (a.modified || 0))
+    .slice(0, 8);
   recent.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
   });
@@ -253,7 +260,7 @@ function renderLibraryAlbums() {
   } else if (sort === 'z-a') {
     albums.sort((a, b) => b.name.localeCompare(a.name));
   } else {
-    albums.reverse();
+    albums.sort((a, b) => (b.modified || 0) - (a.modified || 0));
   }
   albums.forEach((album, i) => {
     grid.appendChild(makeAlbumCard(album, i));
@@ -700,13 +707,65 @@ function playCurrentQueueItem() {
   updateTrackListHighlight();
   renderQueuePanel();
   downloadForOffline(track);
+  preloadNextTrack();
+}
+
+function preloadNextTrack() {
+  preloadReady = false;
+  preloadedTrack = null;
+  const nextIdx = getNextQueueIndex();
+  if (nextIdx === null) return;
+  const nextTrack = state.queue[nextIdx];
+  const url = `${BASE_URL}/${nextTrack.path}`;
+
+  audioPreload.oncanplaythrough = () => {
+    preloadReady = true;
+    preloadedTrack = nextTrack;
+  };
+  audioPreload.onerror = () => { preloadReady = false; };
+  audioPreload.src = url;
+  audioPreload.load();
+}
+
+function getNextQueueIndex() {
+  if (state.repeat === 'one') return state.queueIndex;
+  if (!state.queue || state.queue.length === 0) return null;
+  if (state.shuffle) return Math.floor(Math.random() * state.queue.length);
+  const next = state.queueIndex + 1;
+  if (next >= state.queue.length) return state.repeat === 'all' ? 0 : null;
+  return next;
 }
 
 function loadAndPlay(track) {
   const url = `${BASE_URL}/${track.path}`;
+
+  // If the preload element has this track buffered, swap instantly
+  if (preloadReady && preloadedTrack && preloadedTrack.path === track.path) {
+    const currentSrc = audio.src;
+    const nextSrc = audioPreload.src;
+    audioPreload.src = currentSrc;
+    audio.src = nextSrc;
+    preloadReady = false;
+    preloadedTrack = null;
+    audio.play().catch(e => console.warn('Playback failed:', e));
+    state.isPlaying = true;
+    requestWakeLock();
+    return;
+  }
+
+  // Fallback: standard load
+  audio.pause();
   audio.src = url;
   audio.load();
-  audio.play().catch(e => console.warn('Autoplay blocked:', e));
+
+  requestWakeLock();
+
+  const playPromise = audio.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(e => {
+      console.warn('Playback failed:', e);
+    });
+  }
   state.isPlaying = true;
 }
 
@@ -769,6 +828,11 @@ audio.addEventListener('timeupdate', () => {
   $('progress-thumb').style.left = pct + '%';
   $('time-current').textContent = formatTime(audio.currentTime);
   $('time-total').textContent = formatTime(audio.duration);
+
+  // Preload next track when within 12 seconds of song end
+  if (audio.duration - audio.currentTime < 12 && !preloadReady && !audioPreload.src) {
+    preloadNextTrack();
+  }
 });
 
 audio.addEventListener('ended', () => {
@@ -777,17 +841,46 @@ audio.addEventListener('ended', () => {
     audio.play();
     return;
   }
-  if (state.shuffle) {
-    state.queueIndex = Math.floor(Math.random() * state.queue.length);
-  } else {
-    state.queueIndex++;
+
+  // Use preloaded track if ready (instant transition for iOS background)
+  if (preloadReady && preloadedTrack) {
+    const nextUrl = audioPreload.src;
+    audioPreload.src = '';
+    audio.src = nextUrl;
+    preloadReady = false;
+    state.currentTrack = preloadedTrack;
+    preloadedTrack = null;
+    state.queueIndex = getNextQueueIndexActual();
+
+    audio.play().catch(e => console.warn('Autoplay blocked:', e));
+    state.isPlaying = true;
+    updateMediaSession(state.currentTrack);
+    updatePlayerUI(state.currentTrack);
+    updateTrackListHighlight();
+    renderQueuePanel();
+    downloadForOffline(state.currentTrack);
+    preloadNextTrack();
+    return;
   }
+
+  // Fallback: standard transition
+  state.queueIndex = getNextQueueIndexActual();
   if (state.queueIndex >= state.queue.length) {
-    if (state.repeat === 'all') state.queueIndex = 0;
-    else { state.isPlaying = false; setPlayPauseIcon(false); return; }
+    state.isPlaying = false;
+    setPlayPauseIcon(false);
+    if (state.wakeLock) state.wakeLock.release();
+    return;
   }
   playCurrentQueueItem();
 });
+
+function getNextQueueIndexActual() {
+  if (!state.queue || state.queue.length === 0) return state.queue.length;
+  if (state.shuffle) return Math.floor(Math.random() * state.queue.length);
+  const next = state.queueIndex + 1;
+  if (next >= state.queue.length) return state.repeat === 'all' ? 0 : state.queue.length;
+  return next;
+}
 
 audio.addEventListener('play', () => { state.isPlaying = true; setPlayPauseIcon(true); });
 audio.addEventListener('pause', () => { state.isPlaying = false; setPlayPauseIcon(false); });
@@ -1232,6 +1325,9 @@ function playNext() {
   } else {
     state.queueIndex = (state.queueIndex + 1) % state.queue.length;
   }
+  audioPreload.src = '';
+  preloadReady = false;
+  preloadedTrack = null;
   playCurrentQueueItem();
 }
 
@@ -1239,6 +1335,9 @@ function playPrev() {
   if (!state.queue.length) return;
   if (audio.currentTime > 3) { audio.currentTime = 0; return; }
   state.queueIndex = (state.queueIndex - 1 + state.queue.length) % state.queue.length;
+  audioPreload.src = '';
+  preloadReady = false;
+  preloadedTrack = null;
   playCurrentQueueItem();
 }
 
@@ -1460,7 +1559,7 @@ function handleSearch() {
   if (isYouTubePlaylistUrl(rawQ)) {
     if (state.lastTriggeredPlaylist !== rawQ) {
       state.lastTriggeredPlaylist = rawQ;
-      fetch(`${BASE_URL}/api/download-playlist`, {
+      fetch(`${BASE_URL}/download-playlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: rawQ })
@@ -1470,7 +1569,7 @@ function handleSearch() {
   if (isYouTubeSingleUrl(rawQ)) {
     if (state.lastTriggeredPlaylist !== rawQ) {
       state.lastTriggeredPlaylist = rawQ;
-      fetch(`${BASE_URL}/api/download-single`, {
+      fetch(`${BASE_URL}/download-single`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: rawQ })
@@ -1653,6 +1752,24 @@ function formatTime(sec) {
   const s = Math.floor(sec % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 }
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      state.wakeLock = await navigator.wakeLock.request('screen');
+      console.log('Wake Lock active');
+    }
+  } catch (err) {
+    console.warn(`${err.name}, ${err.message}`);
+  }
+}
+
+// Re-request wake lock when app becomes visible again
+document.addEventListener('visibilitychange', async () => {
+  if (state.wakeLock !== null && document.visibilityState === 'visible') {
+    requestWakeLock();
+  }
+});
 
 // ── Shuffle mode helper ───────────────────────────────────────
 function setShuffleMode(enabled) {
