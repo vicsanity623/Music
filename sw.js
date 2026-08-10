@@ -2,9 +2,9 @@
 //  SoundVault — Service Worker  v6.3
 // ============================================================
 
-const CACHE_NAME = 'soundvault-v6.3';
+const CACHE_NAME = 'soundvault-v6.4';
 const STATIC_ASSETS = ['./', './index.html', './style.css', './main.js', './manifest.json'];
-const AUDIO_CACHE = 'soundvault-audio-v6.3';
+const AUDIO_CACHE = 'soundvault-audio-v6.4';
 const MAX_AUDIO_CACHE_MB = 16384; // 16 GB limit for audio cache
 
 // ── Install ───────────────────────────────────────────────────
@@ -58,6 +58,7 @@ self.addEventListener('fetch', event => {
 
 // ── Strategies ────────────────────────────────────────────────
 async function cacheFirst(request) {
+  if (request.method !== 'GET') return fetch(request);
   const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
@@ -71,15 +72,21 @@ async function cacheFirst(request) {
 async function networkFirst(request) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    // Only GET requests can be cached — the Cache API throws on POST/PUT,
+    // which previously turned successful downloads into 503s on i(w)OS.
+    if (response.ok && request.method === 'GET') {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
     return response;
-  } catch {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    return new Response('Offline', { status: 503 });
+  } catch (err) {
+    // Never swallow POST responses — only fall back to cache for GET.
+    if (request.method === 'GET') {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+    }
+    console.error('[SW] Network request failed:', err);
+    return new Response('Network error', { status: 503 });
   }
 }
 
