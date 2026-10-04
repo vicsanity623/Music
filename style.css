@@ -2361,3 +2361,114 @@ h2.section-title {
 body.is-ios .volume-wrap {
   display: none !important;
 }
+/* ── Login Gate ───────────────────────────────────────────── */
+#login-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-deep);
+  padding: 24px;
+}
+
+#login-gate.hidden {
+  display: none !important;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--red);
+  font-family: var(--font-display);
+  font-size: 22px;
+  margin-bottom: 28px;
+}
+
+.login-logo svg {
+  width: 32px;
+  height: 32px;
+}
+
+.login-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+}
+
+.login-sub {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0 0 28px;
+}
+
+#login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.login-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+#login-form input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  outline: none;
+  transition: border-color var(--t);
+}
+
+#login-form input:focus {
+  border-color: var(--red);
+}
+
+.login-error {
+  min-height: 18px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--red-glow);
+  text-align: center;
+}
+
+#login-submit {
+  margin-top: 12px;
+  padding: 13px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--red);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter var(--t);
+}
+
+#login-submit:hover {
+  filter: brightness(1.25);
+}
+
+#login-submit:disabled {
+  opacity: .6;
+  cursor: default;
+}

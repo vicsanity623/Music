@@ -10,6 +10,111 @@ const IS_GITHUB_PAGES = window.location.hostname.includes('github.io');
 const BASE_URL = IS_GITHUB_PAGES ? 'https://vics-imac-1.tail37b4f2.ts.net' : window.location.origin;
 const LIBRARY_URL = `${BASE_URL}/library.json`;
 
+// ── Auth (login gate checked by the iMac server) ──────────────
+const AUTH_TOKEN_KEY = 'sv_token';
+const AUTH_USER_KEY = 'sv_user';
+let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+let authUser = localStorage.getItem(AUTH_USER_KEY) || '';
+
+function authUrl(url) {
+  if (!authToken) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(authToken);
+}
+
+function authHeaders(extra) {
+  return Object.assign({}, extra || {}, { 'Authorization': 'Bearer ' + authToken });
+}
+
+function mediaUrl(path) {
+  return authUrl(`${BASE_URL}/${path}`);
+}
+
+function showLoginGate(errMsg) {
+  const gate = $('login-gate');
+  if (gate) gate.classList.remove('hidden');
+  const err = $('login-error');
+  if (err) err.textContent = errMsg || '';
+}
+
+function hideLoginGate() {
+  const gate = $('login-gate');
+  if (gate) gate.classList.add('hidden');
+}
+
+function saveSession(token, user) {
+  authToken = token;
+  authUser = user;
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.setItem(AUTH_USER_KEY, user || '');
+}
+
+function dropSession() {
+  authToken = '';
+  authUser = '';
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+}
+
+function setupLoginGate() {
+  const form = $('login-form');
+  if (!form) return;
+  const errEl = $('login-error');
+  const btn = $('login-submit');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.textContent = '';
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${BASE_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: $('login-username').value.trim(),
+          password: $('login-password').value
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) {
+        errEl.textContent = data.error || 'Wrong username or password.';
+        return;
+      }
+      saveSession(data.token, data.user);
+      $('login-password').value = '';
+      hideLoginGate();
+      await bootApp();
+    } catch (err) {
+      errEl.textContent = 'Cannot reach the server. Try again.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+async function ensureAuthed() {
+  if (!authToken) {
+    showLoginGate();
+    return false;
+  }
+  try {
+    const res = await fetch(authUrl(`${BASE_URL}/api/check`), { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.user) authUser = data.user;
+      hideLoginGate();
+      return true;
+    }
+    if (res.status === 401 || res.status === 403) {
+      dropSession();
+      showLoginGate();
+      return false;
+    }
+  } catch (err) {
+    // Offline but holding a token — keep going so cached audio still plays.
+  }
+  hideLoginGate();
+  return true;
+}
+
 // ── State ─────────────────────────────────────────────────────
 const state = {
   library: null,   // { albums: [...] }
@@ -77,6 +182,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.body.classList.add('is-ios');
   }
 
+  setupLoginGate();
+  if (await ensureAuthed()) {
+    await bootApp();
+  }
+});
+
+async function bootApp() {
   loadPersistedData();
   registerSW();
   setupGreeting();
@@ -138,7 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       mainContent.scrollTo({ top: 0, behavior: 'smooth' });
     });
   }
-});
+}
 
 
 // ── Service Worker ────────────────────────────────────────────
@@ -182,7 +294,7 @@ async function loadLibrary() {
   document.body.appendChild(spinner);
 
   try {
-    const res = await fetch(LIBRARY_URL, { cache: 'no-cache' });
+    const res = await fetch(authUrl(LIBRARY_URL), { cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     state.rawLibrary = await res.json();
     filterLocalLibrary();
@@ -353,7 +465,7 @@ function renderArtistsList(filterText = '') {
                    </svg>`;
     let avatarStyle = '';
     if (data.artistArt) {
-      artHtml = `<img src="${BASE_URL}/${data.artistArt}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy" />`;
+      artHtml = `<img src="${mediaUrl(data.artistArt)}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy" />`;
       avatarStyle = 'background:transparent;border:none;';
     }
 
@@ -380,7 +492,7 @@ function openArtistDetail(artist, tracks, artistArt) {
   const avatarIcon = $('artist-avatar-icon');
   if (avatarIcon) {
     if (artistArt) {
-      avatarIcon.innerHTML = `<img src="${BASE_URL}/${artistArt}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+      avatarIcon.innerHTML = `<img src="${mediaUrl(artistArt)}" alt="${escHtml(artist)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
       avatarIcon.style.background = 'transparent';
       avatarIcon.style.border = 'none';
     } else {
@@ -536,7 +648,7 @@ function showLibrarySubView(name) {
 // ── Album art helper ──────────────────────────────────────────
 function getAlbumArt(albumName) {
   const album = state.library?.albums?.find(a => a.name === albumName);
-  return album?.art ? `${BASE_URL}/${album.art}` : null;
+  return album?.art ? mediaUrl(album.art) : null;
 }
 
 function artInnerHTML(artUrl, hue, size = '40%') {
@@ -550,7 +662,7 @@ function makeAlbumCard(album, idx) {
   const card = document.createElement('div');
   card.className = 'album-card';
   const hue = idx % 5;
-  const artUrl = album.art ? `${BASE_URL}/${album.art}` : null;
+  const artUrl = album.art ? mediaUrl(album.art) : null;
   card.innerHTML = `
     <div class="card-art" data-hue="${artUrl ? '' : hue}" style="${artUrl ? 'background:#111118;' : ''}">
       ${artInnerHTML(artUrl, hue)}
@@ -581,7 +693,7 @@ function reorderPlaylistTracks(playlistId, fromIdx, toIdx) {
 function openAlbumDetail(album) {
   state.albumView = album.name;
   $('detail-title').textContent = album.name;
-  const artUrl = album.art ? `${BASE_URL}/${album.art}` : null;
+  const artUrl = album.art ? mediaUrl(album.art) : null;
   $('detail-art').innerHTML = artInnerHTML(artUrl, 0, '50%');
   $('detail-art').style.background = artUrl ? '#111118' : '';
   renderTrackList('track-list', album.tracks, album.name, null);
@@ -716,7 +828,7 @@ function preloadNextTrack() {
   const nextIdx = getNextQueueIndex();
   if (nextIdx === null) return;
   const nextTrack = state.queue[nextIdx];
-  const url = `${BASE_URL}/${nextTrack.path}`;
+  const url = mediaUrl(nextTrack.path);
 
   audioPreload.oncanplaythrough = () => {
     preloadReady = true;
@@ -737,7 +849,7 @@ function getNextQueueIndex() {
 }
 
 function loadAndPlay(track) {
-  const url = `${BASE_URL}/${track.path}`;
+  const url = mediaUrl(track.path);
 
   // If the preload element has this track buffered, swap instantly
   if (preloadReady && preloadedTrack && preloadedTrack.path === track.path) {
@@ -1260,8 +1372,12 @@ function setupEventListeners() {
     if (!$('context-menu').contains(e.target)) hideContextMenu();
   });
 
-  // Search
+  // Search — live filtering only; downloads NEVER trigger from typing/pasting.
+  // Imports are only started by an explicit Enter keypress (handleSearchImport).
   $('search-input').addEventListener('input', debounce(handleSearch, 150));
+  $('search-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); handleSearchImport(); }
+  });
 
   // Artists Search
   $('artists-search-input')?.addEventListener('input', e => {
@@ -1548,35 +1664,49 @@ function isYouTubePlaylistUrl(str) {
     const parsed = new URL(urlStr);
     const host = parsed.hostname.toLowerCase();
     if (host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com')) {
+      const list = parsed.searchParams.get('list') || '';
+      // Auto-generated/radio playlists (list=RD…/RA… or start_radio=1) can contain
+      // 500–1000+ tracks. NEVER treat them as a downloadable playlist.
+      if (parsed.searchParams.get('start_radio') === '1') return false;
+      if (/^(RD|RA|RDEM|RDAM)/i.test(list)) return false;
       return parsed.searchParams.has('list');
     }
   } catch (e) { }
   return false;
 }
 
-function handleSearch() {
+// Enter key in the search box: explicitly import a pasted URL.
+// Runs confirmation first so a download is never started silently.
+function handleSearchImport() {
   const rawQ = $('search-input').value.trim();
+  if (state.lastTriggeredPlaylist === rawQ) return;
+  state.lastTriggeredPlaylist = rawQ;
+
   if (isYouTubePlaylistUrl(rawQ)) {
-    if (state.lastTriggeredPlaylist !== rawQ) {
-      state.lastTriggeredPlaylist = rawQ;
-      fetch(`${BASE_URL}/download-playlist`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: rawQ })
-      }).catch(err => console.error('Failed to trigger playlist download:', err));
-    }
+    const ok = confirm(`Download full YouTube playlist?\n\n${rawQ}\n\nThis imports EVERY track in the playlist.`);
+    if (!ok) return;
+    showToast('Downloading playlist…');
+    fetch(`${BASE_URL}/download-playlist`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ url: rawQ })
+    }).catch(err => console.error('Failed to trigger playlist download:', err));
+    return;
   }
   if (isYouTubeSingleUrl(rawQ)) {
-    if (state.lastTriggeredPlaylist !== rawQ) {
-      state.lastTriggeredPlaylist = rawQ;
-      fetch(`${BASE_URL}/download-single`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: rawQ })
-      }).catch(err => console.error('Failed to trigger single download:', err));
-    }
+    const ok = confirm(`Import this YouTube video?\n\n${rawQ}`);
+    if (!ok) return;
+    showToast('Importing video…');
+    fetch(`${BASE_URL}/download-single`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ url: rawQ })
+    }).catch(err => console.error('Failed to trigger single download:', err));
   }
+}
 
+function handleSearch() {
+  const rawQ = $('search-input').value.trim();
   const q = rawQ.toLowerCase();
   const results = $('search-results');
   results.innerHTML = '';
@@ -1672,8 +1802,13 @@ function isYouTubeSingleUrl(str) {
     const parsed = new URL(urlStr);
     const host = parsed.hostname.toLowerCase();
     if (host.includes('youtube.com') || host.includes('youtu.be') || host.includes('youtube-nocookie.com')) {
-      // Has a video ID but NO playlist parameter
-      return (parsed.searchParams.has('v') || host.includes('youtu.be')) && !parsed.searchParams.has('list');
+      const list = parsed.searchParams.get('list') || '';
+      const hasVideo = parsed.searchParams.has('v') || host.includes('youtu.be');
+      // Radio/auto-mix URLs (start_radio=1 / list=RD…/RA…) are a single video to us:
+      // NEVER mass-download them, just import the one video on explicit Enter.
+      const isRadio = parsed.searchParams.get('start_radio') === '1' || /^(RD|RA|RDEM|RDAM)/i.test(list);
+      if (isRadio) return hasVideo;
+      return hasVideo && !parsed.searchParams.has('list');
     }
   } catch (e) { }
   return false;
@@ -1797,10 +1932,10 @@ async function downloadForOffline(track) {
   if (!('caches' in window)) return;
   try {
     const cache = await caches.open('soundvault-audio-v5.8');
-    const urlsToCache = [`${BASE_URL}/${track.path}`];
+    const urlsToCache = [mediaUrl(track.path)];
     if (track.stems) {
       for (const stem in track.stems) {
-        urlsToCache.push(`${BASE_URL}/${track.stems[stem]}`);
+        urlsToCache.push(mediaUrl(track.stems[stem]));
       }
     }
     for (const url of urlsToCache) {
@@ -2018,10 +2153,10 @@ function migrateStaleData() {
 
 async function deleteFromCache(track) {
   if (!('caches' in window)) return;
-  const urls = [`${BASE_URL}/${track.path}`];
+  const urls = [mediaUrl(track.path)];
   if (track.stems) {
     for (const stem in track.stems) {
-      urls.push(`${BASE_URL}/${track.stems[stem]}`);
+      urls.push(mediaUrl(track.stems[stem]));
     }
   }
   for (const cacheName of ['soundvault-audio-v5.8', 'soundvault-audio-v1', 'soundvault-audio-v4.0']) {
