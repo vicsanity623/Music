@@ -579,8 +579,34 @@
     <li id="ctx-rename">Rename</li>
   </ul>
 
-  <!-- ── Hidden audio element ───────────────────────────────── -->
-  <audio id="audio-engine" preload="auto"></audio>
+  <!-- ── Login Gate (visible until the iMac server issues a token) ── -->
+  <div id="login-gate">
+    <div class="login-card">
+      <div class="login-logo">
+        <svg viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" />
+          <circle cx="16" cy="16" r="5" fill="currentColor" />
+          <path d="M16 2 A14 14 0 0 1 30 16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+        </svg>
+        <span>SoundVault</span>
+      </div>
+      <h2 class="login-title">Sign in</h2>
+      <p class="login-sub">This library is private.</p>
+      <form id="login-form" autocomplete="on">
+        <label class="login-label" for="login-username">Username</label>
+        <input id="login-username" name="username" type="text" autocomplete="username" autocapitalize="none"
+          spellcheck="false" required />
+        <label class="login-label" for="login-password">Password</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+        <p id="login-error" class="login-error" role="alert"></p>
+        <button type="submit" id="login-submit">Enter</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Hidden audio elements ─────────────────────────────── -->
+  <audio id="audio-engine" preload="auto" playsinline x-webkit-airplay="allow"></audio>
+  <audio id="audio-preload" preload="auto" playsinline x-webkit-airplay="allow"></audio>
 
   <script src="main.js"></script>
 </body>
